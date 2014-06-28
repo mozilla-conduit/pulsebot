@@ -29,7 +29,7 @@ prefix =
 admins =
 verify_ssl = True
 timeout = 120
-enable = pulse
+enable = pulse,treestatus
 
 [pulse]
 channels = #pulsebot,#bugs,#developers,#tb-bugs
@@ -37,6 +37,9 @@ pulsebot = *
 bugs = projects/alder,integration/b2g-inbound,releases/comm-aurora,releases/comm-beta,comm-central,integration/fx-team,releases/mozilla-aurora,releases/mozilla-beta,mozilla-central,releases/mozilla-esr24,integration/mozilla-inbound
 developers = integration/b2g-inbound,integration/fx-team,releases/mozilla-aurora,releases/mozilla-beta,mozilla-central,releases/mozilla-esr24,integration/mozilla-inbound
 tb-bugs = releases/comm-aurora,releases/comm-beta,comm-central
+
+[treestatus]
+server = https://treestatus.mozilla.org/
 ```
 
 The bot can then be started by
