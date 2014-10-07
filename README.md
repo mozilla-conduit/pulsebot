@@ -13,7 +13,7 @@ git clone https://github.com/embolalia/willie
 willie-venv/bin/pip install MozillaPulse
 ```
 
-Then copy ```pulse.py``` in ```$HOME/.willie/modules``` and create a ```$HOME/.willie/default.cfg``` configuration. The current configuration for the bot is:
+Then copy ```pulse.py``` and ```treestatus.py``` in ```$HOME/.willie/modules``` and create a ```$HOME/.willie/default.cfg``` configuration. The current configuration for the bot is:
 
 ```
 [core]
