@@ -28,6 +28,17 @@ class PulseListener(object):
         self.shutting_down = False
         self.bot = bot
 
+        if not bot.config.has_option('pulse', 'user'):
+            raise Exception('Missing configuration: pulse.user')
+
+        if not bot.config.has_option('pulse', 'password'):
+            raise Exception('Missing configuration: pulse.password')
+
+        self.auth = {
+            'user': bot.config.pulse.user,
+            'password': bot.config.pulse.password,
+        }
+
         if bot.config.has_option('pulse', 'channels'):
             for chan in bot.config.pulse.get_list('channels'):
                 confchan = chan[1:] if chan[0] == '#' else conf
@@ -160,7 +171,7 @@ class PulseListener(object):
 
         while not self.shutting_down:
             # Connect to pulse
-            pulse = consumers.BuildConsumer(applabel=self.applabel)
+            pulse = consumers.BuildConsumer(applabel=self.applabel, **self.auth)
 
             # Tell pulse that you want to listen for all messages ('#' is
             # everything) and give a function to call every time there is a
@@ -170,10 +181,13 @@ class PulseListener(object):
             # Manually do the work of pulse.listen() so as to be able to cleanly
             # get out of it if necessary.
             exchange = Exchange(pulse.exchange, type='topic')
-            queue = pulse._create_queue(pulse.applabel, exchange,
-                pulse.topic[0])
-            consumer = pulse.connection.Consumer(queue,
+            queue = pulse._create_queue(exchange, pulse.topic[0])
+            consumer = pulse.connection.Consumer(queue, auto_declare=False,
                 callbacks=[pulse.callback])
+            consumer.queues[0].queue_declare()
+            # Bind to the first key.
+            consumer.queues[0].queue_bind()
+
             with consumer:
                 while not self.shutting_down:
                     try:

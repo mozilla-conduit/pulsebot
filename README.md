@@ -33,6 +33,9 @@ enable = pulse,treestatus
 
 [pulse]
 channels = #pulsebot,#bugs,#developers,#tb-bugs
+user = pulsebot
+password = pulse-password-for-pulsebot
+
 pulsebot = *
 bugs = projects/alder,integration/b2g-inbound,releases/comm-aurora,releases/comm-beta,comm-central,integration/fx-team,releases/mozilla-aurora,releases/mozilla-beta,mozilla-central,releases/mozilla-esr24,integration/mozilla-inbound
 developers = integration/b2g-inbound,integration/fx-team,releases/mozilla-aurora,releases/mozilla-beta,mozilla-central,releases/mozilla-esr24,integration/mozilla-inbound
