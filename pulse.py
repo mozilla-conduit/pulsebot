@@ -121,9 +121,6 @@ class PulseListener(object):
         if not bot.config.has_option('pulse', 'password'):
             raise Exception('Missing configuration: pulse.password')
 
-        if not bot.config.has_option('bugzilla', 'server'):
-            raise Exception('Missing configuration: bugzilla.server')
-
         if (bot.config.has_option('bugzilla', 'server')
                 and bot.config.has_option('bugzilla', 'password')
                 and bot.config.has_option('bugzilla', 'user')):
