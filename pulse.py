@@ -247,9 +247,11 @@ class PulseListener(object):
 
                 urls_to_write = []
                 for url in urls:
-                    # url[5:] is a rough approximation of stripping its scheme.
-                    # In practice, it's enough for the comment checking.
-                    if url[5:] not in comments:
+                    # Only write about a changeset if it's never been mentioned
+                    # at all. This makes us not emit changesets that e.g. land
+                    # on mozilla-inbound when they were mentioned when landing
+                    # on mozilla-central.
+                    if url[-12:] not in comments:
                         urls_to_write.append(url)
 
                 if urls_to_write:
