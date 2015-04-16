@@ -4,10 +4,10 @@
 
 import json
 import re
+import requests
 import socket
 import threading
 import traceback
-import urllib2
 import willie
 from collections import defaultdict
 from kombu import Exchange
@@ -81,13 +81,14 @@ class PulseListener(object):
                 % (repo, rev)
             messages = []
             try:
-                try:
-                    data = json.loads(urllib2.urlopen(pushes_url).read())
-                except urllib2.HTTPError as e:
-                    if e.code != 500:
-                        raise
+                r = requests.get(pushes_url)
+                if r.status_code == 500:
                     # If we got an error 500, try again once.
-                    data = json.loads(urllib2.urlopen(pushes_url).read())
+                    r = requests.get(pushes_url)
+                if r.status_code != 200:
+                    r.raise_for_status()
+
+                data = r.json()
 
                 for d in data.values():
                     changesets = d['changesets']

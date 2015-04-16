@@ -2,8 +2,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import urllib2
 import json
+import requests
 import willie.module
 
 
@@ -46,8 +46,8 @@ class TreeStatus(object):
     def current_status(self, branch=''):
         if branch:
             branch = self.find_branch(branch)
-        return json.load(
-            urllib2.urlopen('%s/%s?format=json' % (self._server, branch)))
+        r = requests.get('%s/%s?format=json' % (self._server, branch))
+        return r.json()
 
 
 def setup(bot):
