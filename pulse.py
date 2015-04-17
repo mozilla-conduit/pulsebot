@@ -268,7 +268,9 @@ class PulseListener(object):
                                     yield url
 
                     try:
-                        self.bugzilla.post_comment(bug, '\n'.join(comment()))
+                        # Skip backouts for now.
+                        if not all(url in backouts for url in urls_to_write):
+                            self.bugzilla.post_comment(bug, '\n'.join(comment()))
                     except:
                         self.bot.msg(self.bot.config.owner,
                             "Failed to send comment to bug %d" % bug)
