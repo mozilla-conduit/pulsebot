@@ -68,6 +68,24 @@ class Bugzilla(object):
         except:
             raise BugzillaError()
 
+    def get_fields(self, bug, fields):
+        bug_url = '%s/rest/bug/%d?include_fields=%s' % (
+            self._server,
+            bug,
+            '+'.join(fields),
+        )
+        try:
+            r = requests.get(bug_url)
+            r.raise_for_status()
+            bug_data = r.json()
+        except:
+            raise BugzillaError()
+
+        if 'error' in bug_data:
+            raise BugzillaError()
+
+        return bug_data.get('bugs', [{}])[0]
+
     def get_comments(self, bug):
         bug_url = '%s/rest/bug/%d/comment?include_fields=text' % (
             self._server, bug)
@@ -267,9 +285,19 @@ class PulseListener(object):
                                 else:
                                     yield url
 
+                    def bug_has_checkin_needed(bug):
+                        fields = ('whiteboard', 'keywords')
+                        values = self.bugzilla.get_fields(bug, fields)
+                        return any('checkin-needed' in v
+                                   for v in values.values())
+
                     try:
                         # Skip backouts for now.
-                        if not all(url in backouts for url in urls_to_write):
+                        skip_comment = (
+                            all(url in backouts for url in urls_to_write)
+                            or bug_has_checkin_needed(bug)
+                        )
+                        if not skip_comment:
                             self.bugzilla.post_comment(bug, '\n'.join(comment()))
                     except:
                         self.bot.msg(self.bot.config.owner,
