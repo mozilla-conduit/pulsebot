@@ -202,7 +202,6 @@ class PulseListener(object):
                 % (repo, rev)
             messages = []
             urls_for_bugs = defaultdict(list)
-            backouts = set()
             try:
                 r = requests.get(pushes_url)
                 if r.status_code == 500:
@@ -231,9 +230,10 @@ class PulseListener(object):
                         if self.bugzilla and branch in self.bugzilla_branches:
                             bugs = parse_bugs(desc)
                             if bugs:
-                                urls_for_bugs[bugs[0]].append(revlink)
-                            if BACKOUT_RE.match(desc):
-                                backouts.add(revlink)
+                                urls_for_bugs[bugs[0]].append((
+                                    revlink,
+                                    bool(BACKOUT_RE.match(desc)),
+                                ))
 
                         if not group_changesets:
                             author = cs['author']
@@ -264,13 +264,16 @@ class PulseListener(object):
                     continue
 
                 urls_to_write = []
-                for url in urls:
+                backouts = set()
+                for url, is_backout in urls:
                     # Only write about a changeset if it's never been mentioned
                     # at all. This makes us not emit changesets that e.g. land
                     # on mozilla-inbound when they were mentioned when landing
                     # on mozilla-central.
                     if url[-12:] not in comments:
                         urls_to_write.append(url)
+                    if is_backout:
+                        backouts.add(url)
 
                 if urls_to_write:
                     def comment():
