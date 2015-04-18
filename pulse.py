@@ -184,11 +184,13 @@ class PulseListener(object):
 
         if self.config:
             self.queue = Queue(42)
+            self.bugzilla_queue = Queue(42)
             self.reporter_thread = threading.Thread(target=self.change_reporter)
             self.listener_thread = threading.Thread(target=self.pulse_listener)
+            self.bugzilla_thread = threading.Thread(target=self.bugzilla_reporter)
             self.reporter_thread.start()
             self.listener_thread.start()
-
+            self.bugzilla_thread.start()
 
     def change_reporter(self):
         while not self.shutting_down:
@@ -256,55 +258,64 @@ class PulseListener(object):
                     self.bot.msg(chan, "Check-in: %s" % msg)
 
             for bug, urls in urls_for_bugs.iteritems():
-                try:
-                    comments = '\n'.join(self.bugzilla.get_comments(bug))
-                except BugzillaError:
-                    # Don't do anything on errors, such as "You are not authorized
-                    # to access bug #xxxxx".
-                    continue
+                self.bugzilla_queue.put((bug, urls))
 
-                urls_to_write = []
-                backouts = set()
-                for url, is_backout in urls:
-                    # Only write about a changeset if it's never been mentioned
-                    # at all. This makes us not emit changesets that e.g. land
-                    # on mozilla-inbound when they were mentioned when landing
-                    # on mozilla-central.
-                    if url[-12:] not in comments:
-                        urls_to_write.append(url)
-                    if is_backout:
-                        backouts.add(url)
+    def bugzilla_reporter(self):
+        while not self.shutting_down:
+            try:
+                bug, urls = self.bugzilla_queue.get(timeout=1)
+            except Empty:
+                continue
 
-                if urls_to_write:
-                    def comment():
-                        if all(url in backouts for url in urls_to_write):
-                            yield 'Backout:'
-                            for url in urls_to_write:
+            try:
+                comments = '\n'.join(self.bugzilla.get_comments(bug))
+            except BugzillaError:
+                # Don't do anything on errors, such as "You are not authorized
+                # to access bug #xxxxx".
+                continue
+
+            urls_to_write = []
+            backouts = set()
+            for url, is_backout in urls:
+                # Only write about a changeset if it's never been mentioned
+                # at all. This makes us not emit changesets that e.g. land
+                # on mozilla-inbound when they were mentioned when landing
+                # on mozilla-central.
+                if url[-12:] not in comments:
+                    urls_to_write.append(url)
+                if is_backout:
+                    backouts.add(url)
+
+            if urls_to_write:
+                def comment():
+                    if all(url in backouts for url in urls_to_write):
+                        yield 'Backout:'
+                        for url in urls_to_write:
+                            yield url
+                    else:
+                        for url in urls_to_write:
+                            if url in backouts:
+                                yield '%s (backout)' % url
+                            else:
                                 yield url
-                        else:
-                            for url in urls_to_write:
-                                if url in backouts:
-                                    yield '%s (backout)' % url
-                                else:
-                                    yield url
 
-                    def bug_has_checkin_needed(bug):
-                        fields = ('whiteboard', 'keywords')
-                        values = self.bugzilla.get_fields(bug, fields)
-                        return any('checkin-needed' in v
-                                   for v in values.values())
+                def bug_has_checkin_needed(bug):
+                    fields = ('whiteboard', 'keywords')
+                    values = self.bugzilla.get_fields(bug, fields)
+                    return any('checkin-needed' in v
+                               for v in values.values())
 
-                    try:
-                        # Skip backouts for now.
-                        skip_comment = (
-                            all(url in backouts for url in urls_to_write)
-                            or bug_has_checkin_needed(bug)
-                        )
-                        if not skip_comment:
-                            self.bugzilla.post_comment(bug, '\n'.join(comment()))
-                    except:
-                        self.bot.msg(self.bot.config.owner,
-                            "Failed to send comment to bug %d" % bug)
+                try:
+                    # Skip backouts for now.
+                    skip_comment = (
+                        all(url in backouts for url in urls_to_write)
+                        or bug_has_checkin_needed(bug)
+                    )
+                    if not skip_comment:
+                        self.bugzilla.post_comment(bug, '\n'.join(comment()))
+                except:
+                    self.bot.msg(self.bot.config.owner,
+                        "Failed to send comment to bug %d" % bug)
 
 
     def pulse_listener(self):
@@ -391,6 +402,7 @@ class PulseListener(object):
         self.shutting_down = True
         self.reporter_thread.join()
         self.listener_thread.join()
+        self.bugzilla_thread.join()
 
 
 def setup(bot):
