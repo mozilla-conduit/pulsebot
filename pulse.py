@@ -7,6 +7,7 @@ import re
 import requests
 import socket
 import threading
+import time
 import traceback
 import willie
 from collections import defaultdict
@@ -261,10 +262,22 @@ class PulseListener(object):
                 self.bugzilla_queue.put((bug, urls))
 
     def bugzilla_reporter(self):
-        while not self.shutting_down:
+        delayed_comments = []
+        def get_one():
+            if delayed_comments:
+                when, bug, urls = delayed_comments[0]
+                if when <= time.time():
+                    delayed_comments.pop(0)
+                    return bug, urls, True
             try:
                 bug, urls = self.bugzilla_queue.get(timeout=1)
+                return bug, urls, False
             except Empty:
+                return None, None, None
+
+        while not self.shutting_down:
+            bug, urls, delayed = get_one()
+            if bug is None:
                 continue
 
             try:
@@ -306,12 +319,15 @@ class PulseListener(object):
                                for v in values.values())
 
                 try:
-                    # Skip backouts for now.
-                    skip_comment = (
-                        all(url in backouts for url in urls_to_write)
+                    # Delay comments for backouts and checkin-needed.
+                    delay_comment = (
+                        not delayed
+                        and all(url in backouts for url in urls_to_write)
                         or bug_has_checkin_needed(bug)
                     )
-                    if not skip_comment:
+                    if delay_comment:
+                        delayed_comments.append((time.time() + 600, bug, urls))
+                    else:
                         self.bugzilla.post_comment(bug, '\n'.join(comment()))
                 except:
                     self.bot.msg(self.bot.config.owner,
