@@ -119,7 +119,7 @@ class Bugzilla(object):
             # If token expired, try again with a new one
             if r.status_code == 401:
                 del self._session.params['token']
-                post_comment(bug, comment)
+                self.post_comment(bug, comment)
             else:
                 raise BugzillaError()
 
