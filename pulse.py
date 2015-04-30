@@ -123,6 +123,24 @@ class Bugzilla(object):
             else:
                 raise BugzillaError()
 
+    def update_bug(self, bug, **kwargs):
+        if 'token' not in self._session.params:
+            self._session.params['token'] = self.get_token()
+
+        try:
+            post_url = '%s/rest/bug/%d' % (self._server, bug)
+            r = self._session.put(
+                post_url, data=json.dumps(kwargs),
+                headers={'Content-Type': 'application/json'})
+            r.raise_for_status()
+        except:
+            # If token expired, try again with a new one
+            if r.status_code == 401:
+                del self._session.params['token']
+                self.update_bug(bug, **kwargs)
+            else:
+                raise BugzillaError()
+
 
 class PulseListener(object):
     instance = None
@@ -312,23 +330,30 @@ class PulseListener(object):
                             else:
                                 yield url
 
-                def bug_has_checkin_needed(bug):
+                try:
                     fields = ('whiteboard', 'keywords')
                     values = self.bugzilla.get_fields(bug, fields)
-                    return any('checkin-needed' in v
-                               for v in values.values())
-
-                try:
-                    # Delay comments for backouts and checkin-needed.
+                    # Delay comments for backouts and checkin-needed in
+                    # whiteboard
                     delay_comment = (
                         not delayed
                         and all(url in backouts for url in urls_to_write)
-                        or bug_has_checkin_needed(bug)
+                        or 'checkin-needed' in values.get('whiteboard', '')
                     )
                     if delay_comment:
                         delayed_comments.append((time.time() + 600, bug, urls))
                     else:
-                        self.bugzilla.post_comment(bug, '\n'.join(comment()))
+                        message = '\n'.join(comment())
+                        kwargs = {}
+                        if 'checkin-needed' in values.get('keywords', {}):
+                            kwargs['keywords'] = {
+                                'remove': ['checkin-needed']
+                            }
+                        if kwargs:
+                            kwargs['comment'] = {'body': message}
+                            self.bugzilla.update_bug(bug, **kwargs)
+                        else:
+                            self.bugzilla.post_comment(bug, message)
                 except:
                     self.bot.msg(self.bot.config.owner,
                         "Failed to send comment to bug %d" % bug)
