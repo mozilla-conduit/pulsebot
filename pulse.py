@@ -337,8 +337,8 @@ class PulseListener(object):
                     # whiteboard
                     delay_comment = (
                         not delayed
-                        and all(url in backouts for url in urls_to_write)
-                        or 'checkin-needed' in values.get('whiteboard', '')
+                        and (all(url in backouts for url in urls_to_write)
+                             or 'checkin-needed' in values.get('whiteboard', ''))
                     )
                     if delay_comment:
                         delayed_comments.append((time.time() + 600, bug, urls))
