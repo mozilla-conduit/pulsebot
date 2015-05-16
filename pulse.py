@@ -48,7 +48,7 @@ def parse_bugs(s):
 BACKOUT_RE = re.compile(r'^back(?:ed)? ?out', re.I)
 
 
-class PulseListener(object):
+class PulseBot(object):
     instance = None
 
     def __init__(self, bot):
@@ -254,10 +254,10 @@ class PulseListener(object):
 
 
 def setup(bot):
-    PulseListener.instance = PulseListener(bot)
+    PulseBot.instance = PulseBot(bot)
 
 
 def shutdown(bot):
-    if PulseListener.instance:
-        PulseListener.instance.shutdown()
-        PulseListener.instance = None
+    if PulseBot.instance:
+        PulseBot.instance.shutdown()
+        PulseBot.instance = None
