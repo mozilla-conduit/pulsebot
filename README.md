@@ -13,7 +13,7 @@ git clone https://github.com/embolalia/willie
 willie-venv/bin/pip install MozillaPulse
 ```
 
-Then copy ```pulse.py``` and ```treestatus.py``` in ```$HOME/.willie/modules``` and create a ```$HOME/.willie/default.cfg``` configuration. The current configuration for the bot is:
+Then create a ```$HOME/.willie/default.cfg``` configuration. The current configuration for the bot is:
 
 ```
 [core]
@@ -29,7 +29,6 @@ prefix =
 admins =
 verify_ssl = True
 timeout = 120
-enable = pulse,treestatus
 
 [pulse]
 channels = #pulsebot,#bugs,#developers,#tb-bugs
@@ -55,5 +54,5 @@ pulse = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,
 
 The bot can then be started by
 ```
-willie-venv/bin/willie
+willie-venv/bin/python -m pulsebot
 ```
