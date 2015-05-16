@@ -2,8 +2,36 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from irc import Bot
+from irc import (
+    Bot,
+    Config,
+)
+from treestatus import (
+    TreeStatus,
+    UnknownBranch,
+)
 import os
 
 
-bot = Bot()
+config = Config(
+    os.path.join(os.path.expanduser('~'), '.willie', 'default.cfg'))
+
+treestatus = TreeStatus(config.treestatus.server)
+
+bot = Bot(config)
+
+for command, where, nick in bot:
+    verb, args = command[0], command[1:]
+    if verb == 'status':
+        if len(args) != 1:
+            bot.msg(where, nick, 'Try again with "status <branch>"')
+        else:
+            branch = args[0]
+            try:
+                status = treestatus.current_status(branch)
+                bot.msg(
+                    where, nick,
+                    '%s is %s' % (status['tree'], status['status'].upper())
+                )
+            except UnknownBranch:
+                bot.msg(where, nick, 'Unknown branch: %s' % branch)
