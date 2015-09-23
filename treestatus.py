@@ -46,8 +46,8 @@ class TreeStatus(object):
     def current_status(self, branch=''):
         if branch:
             branch = self.find_branch(branch)
-        r = requests.get('%s/%s?format=json' % (self._server, branch))
-        return r.json()
+        r = requests.get('%s/trees/%s' % (self._server, branch))
+        return r.json()['result']
 
 
 def setup(bot):
