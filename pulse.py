@@ -237,10 +237,11 @@ class PulseListener(object):
                     changesets = d['changesets']
                     group_changesets = len(changesets) > self.max_checkins
                     if group_changesets:
+                        desc = changesets[0]['desc'].splitlines()[0].strip()
                         short_rev = rev[:12]
                         messages.append('%s/pushloghtml?changeset=%s'
-                            ' - %d changesets'
-                            % (repo, short_rev, len(changesets)))
+                            ' - %d changesets - %s'
+                            % (repo, short_rev, len(changesets), desc))
 
                     for cs in changesets:
                         short_node = cs['node'][:12]
@@ -260,8 +261,7 @@ class PulseListener(object):
                             author = cs['author']
                             author = author.split(' <')[0].strip()
                             message = "%s - %s - %s" % (revlink, author, desc)
-                            messages.append("%s - %s - %s"
-                                % (revlink, author, desc))
+                            messages.append(message)
             except:
                 self.bot.msg(self.bot.config.owner,
                     "Failure on %s:" % pushes_url)
