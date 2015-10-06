@@ -40,3 +40,5 @@ for command, where, nick in bot:
 
 dispatcher.shutdown()
 bot.shutdown()
+# Sopel doesn't terminate all its threads, so kill them all
+os._exit(0)
