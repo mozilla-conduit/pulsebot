@@ -50,52 +50,53 @@ class PulseDispatcher(object):
     instance = None
 
     def __init__(self, bot):
-        self.config = defaultdict(set)
+        self.config = bot.config
+        self.dispatch = defaultdict(set)
         self.max_checkins = 10
         self.applabel = None
         self.shutting_down = False
         self.bot = bot
 
-        if not bot.config.has_option('pulse', 'user'):
+        if not config.has_option('pulse', 'user'):
             raise Exception('Missing configuration: pulse.user')
 
-        if not bot.config.has_option('pulse', 'password'):
+        if not config.has_option('pulse', 'password'):
             raise Exception('Missing configuration: pulse.password')
 
-        if (bot.config.has_option('bugzilla', 'server')
-                and bot.config.has_option('bugzilla', 'password')
-                and bot.config.has_option('bugzilla', 'user')):
-            server = bot.config.bugzilla.server
+        if (config.has_option('bugzilla', 'server')
+                and config.has_option('bugzilla', 'password')
+                and config.has_option('bugzilla', 'user')):
+            server = config.bugzilla.server
             if not server.lower().startswith('https://'):
                 raise Exception('bugzilla.server must be a HTTPS url')
 
             self.bugzilla = Bugzilla(server,
-                                     bot.config.bugzilla.user,
-                                     bot.config.bugzilla.password)
+                                     config.bugzilla.user,
+                                     config.bugzilla.password)
         else:
             self.bugzilla = None
 
-        if bot.config.has_option('bugzilla', 'pulse'):
-            self.bugzilla_branches = bot.config.bugzilla.get_list('pulse')
+        if config.has_option('bugzilla', 'pulse'):
+            self.bugzilla_branches = config.bugzilla.get_list('pulse')
 
         self.pulse = pulse.PulseListener(
-            bot.config.pulse.user,
-            bot.config.pulse.password,
-            bot.config.pulse.applabel
-            if bot.config.has_option('pulse', 'applabel') else None
+            config.pulse.user,
+            config.pulse.password,
+            config.pulse.applabel
+            if config.has_option('pulse', 'applabel') else None
         )
 
-        if bot.config.has_option('pulse', 'channels'):
-            for chan in bot.config.pulse.get_list('channels'):
+        if config.has_option('pulse', 'channels'):
+            for chan in config.pulse.get_list('channels'):
                 confchan = chan[1:] if chan[0] == '#' else chan
-                if bot.config.has_option('pulse', confchan):
-                    for branch in bot.config.pulse.get_list(confchan):
-                        self.config[branch].add(chan)
+                if config.has_option('pulse', confchan):
+                    for branch in config.pulse.get_list(confchan):
+                        self.dispatch[branch].add(chan)
 
-        if bot.config.has_option('pulse', 'max_checkins'):
-            self.max_checkins = bot.config.pulse.max_checkins
+        if config.has_option('pulse', 'max_checkins'):
+            self.max_checkins = config.pulse.max_checkins
 
-        if self.config:
+        if self.dispatch:
             self.bugzilla_queue = Queue(42)
             self.reporter_thread = threading.Thread(target=self.change_reporter)
             self.bugzilla_thread = threading.Thread(target=self.bugzilla_reporter)
@@ -148,17 +149,17 @@ class PulseDispatcher(object):
                             messages.append("%s - %s - %s"
                                 % (revlink, author, desc))
             except:
-                self.bot.msg(self.bot.config.owner,
+                self.bot.msg(self.config.owner,
                     "Failure on %s:" % pushes_url)
                 for line in traceback.format_exc().splitlines():
-                    self.bot.msg(self.bot.config.owner, line)
-                self.bot.msg(self.bot.config.owner,
+                    self.bot.msg(self.config.owner, line)
+                self.bot.msg(self.config.owner,
                     "Message data was: %s" % data, 10)
                 continue
 
             for msg in messages:
-                for chan in self.config.get(branch, set()) | \
-                        self.config.get('*', set()):
+                for chan in self.dispatch.get(branch, set()) | \
+                        self.dispatch.get('*', set()):
                     self.bot.msg(chan, "Check-in: %s" % msg)
 
             for bug, urls in urls_for_bugs.iteritems():
@@ -240,7 +241,7 @@ class PulseDispatcher(object):
                         else:
                             self.bugzilla.post_comment(bug, message)
                 except:
-                    self.bot.msg(self.bot.config.owner,
+                    self.bot.msg(self.config.owner,
                         "Failed to send comment to bug %d" % bug)
 
     def shutdown(self):
