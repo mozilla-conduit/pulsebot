@@ -14,8 +14,7 @@ from pulse_dispatch import PulseDispatcher
 import os
 
 
-config = Config(
-    os.path.join(os.path.expanduser('~'), '.willie', 'default.cfg'))
+config = Config('pulsebot.cfg')
 
 treestatus = TreeStatus(config.treestatus.server)
 
