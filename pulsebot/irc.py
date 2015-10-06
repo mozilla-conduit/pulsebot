@@ -56,6 +56,8 @@ class Bot(object):
                 yield self._queue.get(timeout=1)
             except Empty:
                 continue
+            except KeyboardInterrupt:
+                break
 
     def msg(self, where, nick, message):
         if nick and where != nick:

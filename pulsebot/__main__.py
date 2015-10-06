@@ -38,3 +38,6 @@ for command, where, nick in bot:
                 )
             except UnknownBranch:
                 bot.msg(where, nick, 'Unknown branch: %s' % branch)
+
+dispatcher.shutdown()
+bot.shutdown()
