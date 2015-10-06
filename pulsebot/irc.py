@@ -12,19 +12,6 @@ import threading
 import os
 
 
-class Config(Config):
-    def enumerate_modules(self, show_all=False):
-        d = os.path.normpath(
-            os.path.join(
-                os.path.dirname(__file__),
-                '..'
-            )
-        )
-        return {
-            'pulse': os.path.join(d, 'pulse.py'),
-        }
-
-
 class Willie(bot.Willie):
     def __init__(self, config, queue):
         bot.Willie.__init__(self, config)

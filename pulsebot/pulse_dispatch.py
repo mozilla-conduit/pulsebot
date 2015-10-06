@@ -49,13 +49,13 @@ BACKOUT_RE = re.compile(r'^back(?:ed)? ?out', re.I)
 class PulseDispatcher(object):
     instance = None
 
-    def __init__(self, bot):
-        self.config = bot.config
+    def __init__(self, msg, config):
+        self.msg = msg
+        self.config = config
         self.dispatch = defaultdict(set)
         self.max_checkins = 10
         self.applabel = None
         self.shutting_down = False
-        self.bot = bot
 
         if not config.has_option('pulse', 'user'):
             raise Exception('Missing configuration: pulse.user')
@@ -149,18 +149,18 @@ class PulseDispatcher(object):
                             messages.append("%s - %s - %s"
                                 % (revlink, author, desc))
             except:
-                self.bot.msg(self.config.owner,
+                self.msg(self.config.owner, self.config.owner,
                     "Failure on %s:" % pushes_url)
                 for line in traceback.format_exc().splitlines():
-                    self.bot.msg(self.config.owner, line)
-                self.bot.msg(self.config.owner,
+                    self.msg(self.config.owner, self.config.owner, line)
+                self.msg(self.config.owner, self.config.owner,
                     "Message data was: %s" % data, 10)
                 continue
 
             for msg in messages:
                 for chan in self.dispatch.get(branch, set()) | \
                         self.dispatch.get('*', set()):
-                    self.bot.msg(chan, "Check-in: %s" % msg)
+                    self.msg(chan, chan, "Check-in: %s" % msg)
 
             for bug, urls in urls_for_bugs.iteritems():
                 self.bugzilla_queue.put((bug, urls))
@@ -241,7 +241,7 @@ class PulseDispatcher(object):
                         else:
                             self.bugzilla.post_comment(bug, message)
                 except:
-                    self.bot.msg(self.config.owner,
+                    self.msg(self.config.owner, self.config.owner,
                         "Failed to send comment to bug %d" % bug)
 
     def shutdown(self):

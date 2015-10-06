@@ -1,7 +1,7 @@
 pulsebot
 ========
 
-Pulsebot is a bot listening to pulse.mozilla.org for mercurial changes and notifying channels accordingly. It comes in the form of a willie module.
+Pulsebot is a bot listening to pulse.mozilla.org for mercurial changes and notifying channels accordingly. It uses the willie bot for all interactions with IRC servers.
 
 The current setup used on irc.mozilla.org can be replicated as follows:
 

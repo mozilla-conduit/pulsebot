@@ -10,6 +10,7 @@ from treestatus import (
     TreeStatus,
     UnknownBranch,
 )
+from pulse_dispatch import PulseDispatcher
 import os
 
 
@@ -19,6 +20,8 @@ config = Config(
 treestatus = TreeStatus(config.treestatus.server)
 
 bot = Bot(config)
+
+dispatcher = PulseDispatcher(bot.msg, config)
 
 for command, where, nick in bot:
     verb, args = command[0], command[1:]
