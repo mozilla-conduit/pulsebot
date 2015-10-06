@@ -2,8 +2,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from willie.config import Config
-from willie import bot
+from sopel.config import Config
+from sopel import bot
 from Queue import (
     Empty,
     Queue,
@@ -12,9 +12,9 @@ import threading
 import os
 
 
-class Willie(bot.Willie):
+class Sopel(bot.Sopel):
     def __init__(self, config, queue):
-        bot.Willie.__init__(self, config)
+        bot.Sopel.__init__(self, config)
         self._queue = queue
 
     def dispatch(self, pretrigger):
@@ -34,24 +34,24 @@ class Willie(bot.Willie):
                 self._queue.put(
                     (what.split(), pretrigger.sender, pretrigger.nick))
 
-        bot.Willie.dispatch(self, pretrigger)
+        bot.Sopel.dispatch(self, pretrigger)
 
 
 class Bot(object):
     def __init__(self, config):
         self._queue = Queue(42)
-        self._willie = Willie(config, self._queue)
+        self._sopel = Sopel(config, self._queue)
 
         self._thread = threading.Thread(target=self._run)
         self._thread.start()
 
     def _run(self):
-        self._willie.run(self._willie.config.core.host,
-                         int(self._willie.config.core.port))
-        self._willie = None
+        self._sopel.run(self._sopel.config.core.host,
+                         int(self._sopel.config.core.port))
+        self._sopel = None
 
     def __iter__(self):
-        while self._willie:
+        while self._sopel:
             try:
                 yield self._queue.get(timeout=1)
             except Empty:
@@ -62,8 +62,8 @@ class Bot(object):
     def msg(self, where, nick, message):
         if nick and where != nick:
             message = '%s: %s' % (nick, message)
-        self._willie.msg(where, message)
+        self._sopel.msg(where, message)
 
     def shutdown(self):
-        self._willie.quit('Terminated')
+        self._sopel.quit('Terminated')
         self._thread.join()

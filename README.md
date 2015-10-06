@@ -7,10 +7,10 @@ The current setup used on irc.mozilla.org can be replicated as follows:
 
 ```
 sudo apt-get install python-virtualenv git
-virtualenv willie-venv
-git clone https://github.com/embolalia/willie
-(cd willie; ../willie-venv/bin/python setup.py install)
-willie-venv/bin/pip install MozillaPulse
+virtualenv bot
+git clone https://github.com/sopel-irc/sopel
+(cd sopel; ../bot/bin/python setup.py install)
+bot/bin/pip install MozillaPulse
 ```
 
 Then create a ```pulsebot.cfg``` configuration in the directory you will start it from. The current configuration for the bot is:
@@ -54,5 +54,5 @@ pulse = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,
 
 The bot can then be started by
 ```
-willie-venv/bin/python -m pulsebot
+bot/bin/python -m pulsebot
 ```

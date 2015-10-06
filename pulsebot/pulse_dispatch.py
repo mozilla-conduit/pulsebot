@@ -57,15 +57,15 @@ class PulseDispatcher(object):
         self.applabel = None
         self.shutting_down = False
 
-        if not config.has_option('pulse', 'user'):
+        if not config.parser.has_option('pulse', 'user'):
             raise Exception('Missing configuration: pulse.user')
 
-        if not config.has_option('pulse', 'password'):
+        if not config.parser.has_option('pulse', 'password'):
             raise Exception('Missing configuration: pulse.password')
 
-        if (config.has_option('bugzilla', 'server')
-                and config.has_option('bugzilla', 'password')
-                and config.has_option('bugzilla', 'user')):
+        if (config.parser.has_option('bugzilla', 'server')
+                and config.parser.has_option('bugzilla', 'password')
+                and config.parser.has_option('bugzilla', 'user')):
             server = config.bugzilla.server
             if not server.lower().startswith('https://'):
                 raise Exception('bugzilla.server must be a HTTPS url')
@@ -76,24 +76,24 @@ class PulseDispatcher(object):
         else:
             self.bugzilla = None
 
-        if config.has_option('bugzilla', 'pulse'):
+        if config.parser.has_option('bugzilla', 'pulse'):
             self.bugzilla_branches = config.bugzilla.get_list('pulse')
 
         self.pulse = pulse.PulseListener(
             config.pulse.user,
             config.pulse.password,
             config.pulse.applabel
-            if config.has_option('pulse', 'applabel') else None
+            if config.parser.has_option('pulse', 'applabel') else None
         )
 
-        if config.has_option('pulse', 'channels'):
+        if config.parser.has_option('pulse', 'channels'):
             for chan in config.pulse.get_list('channels'):
                 confchan = chan[1:] if chan[0] == '#' else chan
-                if config.has_option('pulse', confchan):
+                if config.parser.has_option('pulse', confchan):
                     for branch in config.pulse.get_list(confchan):
                         self.dispatch[branch].add(chan)
 
-        if config.has_option('pulse', 'max_checkins'):
+        if config.parser.has_option('pulse', 'max_checkins'):
             self.max_checkins = config.pulse.max_checkins
 
         if self.dispatch:
