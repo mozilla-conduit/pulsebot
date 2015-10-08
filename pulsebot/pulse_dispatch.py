@@ -149,11 +149,12 @@ class PulseDispatcher(object):
                             messages.append("%s - %s - %s"
                                 % (revlink, author, desc))
             except:
-                self.msg(self.config.owner, self.config.owner,
+                self.msg(self.config.core.owner, self.config.core.owner,
                     "Failure on %s:" % pushes_url)
                 for line in traceback.format_exc().splitlines():
-                    self.msg(self.config.owner, self.config.owner, line)
-                self.msg(self.config.owner, self.config.owner,
+                    self.msg(self.config.core.owner, self.config.core.owner,
+                        line)
+                self.msg(self.config.core.owner, self.config.core.owner,
                     "Message data was: %s" % data, 10)
                 continue
 
@@ -241,7 +242,7 @@ class PulseDispatcher(object):
                         else:
                             self.bugzilla.post_comment(bug, message)
                 except:
-                    self.msg(self.config.owner, self.config.owner,
+                    self.msg(self.config.core.owner, self.config.core.owner,
                         "Failed to send comment to bug %d" % bug)
 
     def shutdown(self):
