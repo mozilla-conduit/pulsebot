@@ -20,7 +20,9 @@ class PulseListener(object):
                 self.applabel = 'pulsebot-%s' % uuid.uuid4()
             except:
                 from datetime import datetime
-                self = 'pulsebot-%s' % datetime.now()
+                self.applabel = 'pulsebot-%s' % datetime.now()
+        else:
+            self.applabel = applabel
 
         self.auth = {
             'user': user,
