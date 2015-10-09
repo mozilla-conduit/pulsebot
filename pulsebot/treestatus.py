@@ -43,5 +43,8 @@ class TreeStatus(object):
     def current_status(self, branch=''):
         if branch:
             branch = self.find_branch(branch)
-        r = requests.get('%s/%s?format=json' % (self._server, branch))
-        return r.json()
+        url = self._server
+        if branch:
+            url += '/' + branch
+        r = requests.get(url)
+        return r.json()['result']

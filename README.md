@@ -43,7 +43,7 @@ media = projects/alder
 tb-bugs = releases/comm-aurora,releases/comm-beta,comm-central
 
 [treestatus]
-server = https://treestatus.mozilla.org/
+server = https://api.pub.build.mozilla.org/treestatus/trees
 
 [bugzilla]
 server = https://bugzilla.mozilla.org/
