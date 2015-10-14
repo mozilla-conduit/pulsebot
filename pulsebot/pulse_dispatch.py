@@ -43,6 +43,12 @@ def parse_bugs(s):
     return [bug for bug in bugs if bug < 100000000]
 
 
+def extract_summary(s):
+    firstline = s.splitlines()[0]
+    if len(firstline) < 4:
+        return ''
+    return ' - ' + firstline
+
 BACKOUT_RE = re.compile(r'^back(?:ed)? ?out', re.I)
 
 
@@ -140,6 +146,7 @@ class PulseDispatcher(object):
                             if bugs:
                                 urls_for_bugs[bugs[0]].append((
                                     revlink,
+                                    extract_summary(desc),
                                     bool(BACKOUT_RE.match(desc)),
                                 ))
 
@@ -193,14 +200,16 @@ class PulseDispatcher(object):
                 continue
 
             urls_to_write = []
+            summary = {}
             backouts = set()
-            for url, is_backout in urls:
+            for url, desc, is_backout in urls:
                 # Only write about a changeset if it's never been mentioned
                 # at all. This makes us not emit changesets that e.g. land
                 # on mozilla-inbound when they were mentioned when landing
                 # on mozilla-central.
                 if url[-12:] not in comments:
                     urls_to_write.append(url)
+                    summary[url] = desc
                 if is_backout:
                     backouts.add(url)
 
@@ -209,13 +218,13 @@ class PulseDispatcher(object):
                     if all(url in backouts for url in urls_to_write):
                         yield 'Backout:'
                         for url in urls_to_write:
-                            yield url
+                            yield url + summary[url]
                     else:
                         for url in urls_to_write:
                             if url in backouts:
-                                yield '%s (backout)' % url
+                                yield '%s (backout)%s' % (url, summary[url])
                             else:
-                                yield url
+                                yield url + summary[url]
 
                 try:
                     fields = ('whiteboard', 'keywords')
