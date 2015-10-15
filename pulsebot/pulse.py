@@ -78,7 +78,7 @@ class PulseListener(object):
         while not self.shutting_down:
             # Connect to pulse
             pulse = consumers.BuildConsumer(
-                applabel=self.applabel, **self.auth)
+                applabel=self.applabel, durable=True, **self.auth)
 
             # Tell pulse that you want to listen for all messages ('#' is
             # everything) and give a function to call every time there is a
