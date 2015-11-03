@@ -59,10 +59,10 @@ class Bot(object):
             except KeyboardInterrupt:
                 break
 
-    def msg(self, where, nick, message):
+    def msg(self, where, nick, message, max_messages=1):
         if nick and where != nick:
             message = '%s: %s' % (nick, message)
-        self._sopel.msg(where, message)
+        self._sopel.msg(where, message, max_messages=max_messages)
 
     def shutdown(self):
         self._sopel.quit('Terminated')
