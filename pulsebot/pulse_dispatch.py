@@ -9,7 +9,6 @@ import time
 import traceback
 from collections import defaultdict
 from Queue import Queue, Empty
-from pulsebot import pulse
 from pulsebot.bugzilla import (
     Bugzilla,
     BugzillaError,
@@ -49,19 +48,13 @@ BACKOUT_RE = re.compile(r'^back(?:ed)? ?out', re.I)
 class PulseDispatcher(object):
     instance = None
 
-    def __init__(self, msg, config):
+    def __init__(self, msg, config, pulse):
         self.msg = msg
         self.config = config
+        self.pulse = pulse
         self.dispatch = defaultdict(set)
         self.max_checkins = 10
-        self.applabel = None
         self.shutting_down = False
-
-        if not config.parser.has_option('pulse', 'user'):
-            raise Exception('Missing configuration: pulse.user')
-
-        if not config.parser.has_option('pulse', 'password'):
-            raise Exception('Missing configuration: pulse.password')
 
         if (config.parser.has_option('bugzilla', 'server')
                 and config.parser.has_option('bugzilla', 'password')
@@ -78,13 +71,6 @@ class PulseDispatcher(object):
 
         if config.parser.has_option('bugzilla', 'pulse'):
             self.bugzilla_branches = config.bugzilla.get_list('pulse')
-
-        self.pulse = pulse.PulseListener(
-            config.pulse.user,
-            config.pulse.password,
-            config.pulse.applabel
-            if config.parser.has_option('pulse', 'applabel') else None
-        )
 
         if config.parser.has_option('pulse', 'channels'):
             for chan in config.pulse.get_list('channels'):
@@ -180,9 +166,11 @@ class PulseDispatcher(object):
             except Empty:
                 return None, None, None
 
-        while not self.shutting_down:
+        while True:
             bug, urls, delayed = get_one()
             if bug is None:
+                if self.shutting_down:
+                    break
                 continue
 
             try:
@@ -246,7 +234,6 @@ class PulseDispatcher(object):
                         "Failed to send comment to bug %d" % bug)
 
     def shutdown(self):
-        self.shutting_down = True
-        self.pulse.shutdown()
         self.reporter_thread.join()
+        self.shutting_down = True
         self.bugzilla_thread.join()
