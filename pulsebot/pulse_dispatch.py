@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import logging
 import re
 import requests
 import threading
@@ -16,8 +17,6 @@ from pulsebot.bugzilla import (
     Bugzilla,
     BugzillaError,
 )
-
-# TODO: Remove debugging messages to owner.
 
 REVLINK_RE = re.compile('/rev/[^/]*$')
 
@@ -177,13 +176,11 @@ class PulseDispatcher(object):
                             )
                         messages.append(group)
             except:
-                self.msg(self.config.core.owner, self.config.core.owner,
-                    "Failure on %s:" % push_url)
+                logger = logging.getLogger('pulsebot.dispatch')
+                logger.error("Failure on %s", push_url)
                 for line in traceback.format_exc().splitlines():
-                    self.msg(self.config.core.owner, self.config.core.owner,
-                        line)
-                self.msg(self.config.core.owner, self.config.core.owner,
-                    "Message data was: %r" % pulse_message, 10)
+                    logger.debug(line)
+                logger.debug("Message data was: %r", pulse_message)
                 continue
 
             for msg in messages:
@@ -272,8 +269,8 @@ class PulseDispatcher(object):
                         else:
                             self.bugzilla.post_comment(bug, message)
                 except:
-                    self.msg(self.config.core.owner, self.config.core.owner,
-                        "Failed to send comment to bug %d" % bug)
+                    logging.getLogger('pulsebot.buzilla').error(
+                        "Failed to send comment to bug %d", bug)
 
     def shutdown(self):
         self.reporter_thread.join()

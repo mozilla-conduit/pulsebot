@@ -8,6 +8,7 @@ from Queue import (
     Empty,
     Queue,
 )
+import logging
 import threading
 import os
 
@@ -37,6 +38,15 @@ class Sopel(bot.Sopel):
         bot.Sopel.dispatch(self, pretrigger)
 
 
+class MsgWriter(object):
+    def __init__(self, bot, nick):
+        self._bot = bot
+        self._nick = nick
+
+    def write(self, data):
+        self._bot.msg(self._nick, self._nick, data, 10)
+
+
 class Bot(object):
     def __init__(self, config):
         self._queue = Queue(42)
@@ -44,6 +54,12 @@ class Bot(object):
 
         self._thread = threading.Thread(target=self._run)
         self._thread.start()
+
+        # Setup logging
+        logger = logging.getLogger('pulsebot')
+        logger.setLevel(logging.DEBUG)
+        logger.addHandler(logging.StreamHandler(
+            MsgWriter(self, config.core.owner)))
 
     def _run(self):
         self._sopel.run(self._sopel.config.core.host,
