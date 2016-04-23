@@ -26,8 +26,8 @@ if not config.parser.has_option('pulse', 'password'):
 pulse = PulseListener(
     config.pulse.user,
     config.pulse.password,
-    'exchange/build/',
-    'change.#',
+    'exchange/hgpushes/v1',
+    '#',
     config.pulse.applabel
     if config.parser.has_option('pulse', 'applabel') else None
 )

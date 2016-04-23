@@ -7,7 +7,10 @@ import requests
 import threading
 import time
 import traceback
-from collections import defaultdict
+from collections import (
+    defaultdict,
+    OrderedDict,
+)
 from Queue import Queue, Empty
 from pulsebot.bugzilla import (
     Bugzilla,
@@ -90,55 +93,51 @@ class PulseDispatcher(object):
             self.bugzilla_thread.start()
 
     def change_reporter(self):
-        for data in self.pulse:
-            # Sanity checks
-            try:
-                payload = data.get('payload', {})
-                change = payload.get('change', {})
-                revlink = change.get('revlink')
-                branch = change.get('branch')
-                rev = change.get('rev')
-                if not (revlink and branch and rev):
-                    continue
-            except Exception as e:
-                continue
-            try:
-                properties = {
-                    a: b for a, b, c in change.get('properties', ())
-                }
-            except:
-                properties = {}
+        for message in self.pulse:
+            self._change_reporter(message)
 
-            change['files'] = ['...']
-            if ('polled_moz_revision' in properties or
-                    'polled_comm_revision' in properties or
-                    'releng' not in data.get('_meta', {})
-                    .get('master_name', '')):
+    def _change_reporter(self, pulse_message):
+        # Sanity checks
+        try:
+            payload = pulse_message.get('payload', {})
+            repo = payload.get('repo_url')
+            pushes = payload.get('pushlog_pushes')
+            meta = pulse_message.get('_meta', {})
+            branch = meta.get('routing_key')
+            if not (repo and pushes and branch):
+                return
+        except Exception as e:
+            return
+
+        for push in pushes:
+            push_url = push.get('push_full_json_url')
+            if not push_url:
                 continue
 
-            repo = REVLINK_RE.sub('', revlink)
-            pushes_url = '%s/json-pushes?full=1&changeset=%s' \
-                % (repo, rev)
+            base_url, params = push_url.split('?')
+            params = OrderedDict(p.split('=', 1) for p in params.split('&'))
+            params = '&'.join('%s=%s' % (k, v)
+                              for k, v in params.iteritems()
+                              if k not in ('version', 'full'))
+
             messages = []
             urls_for_bugs = defaultdict(list)
             try:
-                r = requests.get(pushes_url)
+                r = requests.get(push_url)
                 if r.status_code == 500:
                     # If we got an error 500, try again once.
-                    r = requests.get(pushes_url)
+                    r = requests.get(push_url)
                 if r.status_code != 200:
                     r.raise_for_status()
 
                 data = r.json()
 
-                for d in data.values():
+                for d in data.get('pushes', {}).values():
                     changesets = d['changesets']
                     group_changesets = len(changesets) > self.max_checkins
                     if group_changesets:
-                        short_rev = rev[:12]
-                        messages.append('%s/pushloghtml?changeset=%s'
-                            ' - %d changesets'
-                            % (repo, short_rev, len(changesets)))
+                        messages.append('%s/pushloghtml?%s - %d changesets'
+                                        % (repo, params, len(changesets)))
 
                     for cs in changesets:
                         short_node = cs['node'][:12]
@@ -161,12 +160,12 @@ class PulseDispatcher(object):
                                 % (revlink, author, desc))
             except:
                 self.msg(self.config.core.owner, self.config.core.owner,
-                    "Failure on %s:" % pushes_url)
+                    "Failure on %s:" % push_url)
                 for line in traceback.format_exc().splitlines():
                     self.msg(self.config.core.owner, self.config.core.owner,
                         line)
                 self.msg(self.config.core.owner, self.config.core.owner,
-                    "Message data was: %s" % data, 10)
+                    "Message data was: %r" % pulse_message, 10)
                 continue
 
             for msg in messages:
