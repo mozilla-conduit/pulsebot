@@ -90,7 +90,32 @@ class PulseDispatcher(object):
             self.bugzilla_thread.start()
 
     def change_reporter(self):
-        for rev, branch, revlink, data in self.pulse:
+        for data in self.pulse:
+            # Sanity checks
+            try:
+                payload = data.get('payload', {})
+                change = payload.get('change', {})
+                revlink = change.get('revlink')
+                branch = change.get('branch')
+                rev = change.get('rev')
+                if not (revlink and branch and rev):
+                    continue
+            except Exception as e:
+                continue
+            try:
+                properties = {
+                    a: b for a, b, c in change.get('properties', ())
+                }
+            except:
+                properties = {}
+
+            change['files'] = ['...']
+            if ('polled_moz_revision' in properties or
+                    'polled_comm_revision' in properties or
+                    'releng' not in data.get('_meta', {})
+                    .get('master_name', '')):
+                continue
+
             repo = REVLINK_RE.sub('', revlink)
             pushes_url = '%s/json-pushes?full=1&changeset=%s' \
                 % (repo, rev)

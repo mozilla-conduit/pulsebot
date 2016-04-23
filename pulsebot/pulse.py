@@ -5,13 +5,24 @@
 import socket
 import threading
 from kombu import Exchange
-from mozillapulse import consumers
+from mozillapulse.config import PulseConfiguration
+from mozillapulse.consumers import GenericConsumer
 from Queue import Queue, Empty
 
 
+class PulseConsumer(GenericConsumer):
+    def __init__(self, exchange, **kwargs):
+        super(PulseConsumer, self).__init__(
+            PulseConfiguration(**kwargs), exchange, **kwargs)
+
+
 class PulseListener(object):
-    def __init__(self, user=None, password=None, applabel=None):
+    def __init__(self, user=None, password=None, exchange=None, topic='#',
+                 applabel=None):
         self.shutting_down = False
+        assert exchange
+        self.exchange = exchange
+        self.topic = topic
 
         if not applabel:
             # Let's generate a unique label for the script
@@ -36,54 +47,18 @@ class PulseListener(object):
     def pulse_listener(self):
         def got_message(data, message):
             message.ack()
-
-            # Sanity checks
-            payload = data.get('payload')
-            if not payload:
-                return
-
-            change = payload.get('change')
-            if not change:
-                return
-
-            revlink = change.get('revlink')
-            if not revlink:
-                return
-
-            branch = change.get('branch')
-            if not branch:
-                return
-
-            rev = change.get('rev')
-            if not rev:
-                return
-
-            try:
-                properties = {
-                    a: b for a, b, c
-                    in change.get('properties', [])
-                }
-            except:
-                properties = {}
-
-            change['files'] = ['...']
-            if ('polled_moz_revision' in properties or
-                    'polled_comm_revision' in properties or
-                    'releng' not in data.get('_meta', {})
-                    .get('master_name', '')):
-                return
-
-            self.queue.put((rev, branch, revlink, data))
+            self.queue.put(data)
 
         while not self.shutting_down:
             # Connect to pulse
-            pulse = consumers.BuildConsumer(
-                applabel=self.applabel, durable=True, **self.auth)
+            pulse = PulseConsumer(
+                exchange=self.exchange, applabel=self.applabel, durable=True,
+                **self.auth)
 
             # Tell pulse that you want to listen for all messages ('#' is
             # everything) and give a function to call every time there is a
             # message
-            pulse.configure(topic=['change.#'], callback=got_message)
+            pulse.configure(topic=[self.topic], callback=got_message)
 
             # Manually do the work of pulse.listen() so as to be able to
             # cleanly get out of it if necessary.
