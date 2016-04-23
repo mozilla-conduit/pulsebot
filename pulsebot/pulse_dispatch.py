@@ -136,8 +136,9 @@ class PulseDispatcher(object):
                     changesets = d['changesets']
                     group_changesets = len(changesets) > self.max_checkins
                     if group_changesets:
-                        messages.append('%s/pushloghtml?%s - %d changesets'
-                                        % (repo, params, len(changesets)))
+                        group = ('%s/pushloghtml?%s - %d changesets'
+                                 % (repo, params, len(changesets)))
+                        group_bugs = []
 
                     for cs in changesets:
                         short_node = cs['node'][:12]
@@ -145,19 +146,36 @@ class PulseDispatcher(object):
                             % (repo, short_node)
                         desc = cs['desc'].splitlines()[0].strip()
 
-                        if self.bugzilla and branch in self.bugzilla_branches:
+                        for_bugzilla = (self.bugzilla and
+                                        branch in self.bugzilla_branches)
+                        if for_bugzilla or group_changesets:
                             bugs = parse_bugs(desc)
-                            if bugs:
-                                urls_for_bugs[bugs[0]].append((
-                                    revlink,
-                                    bool(BACKOUT_RE.match(desc)),
-                                ))
+                        if for_bugzilla and bugs:
+                            urls_for_bugs[bugs[0]].append((
+                                revlink,
+                                bool(BACKOUT_RE.match(desc)),
+                            ))
 
                         if not group_changesets:
                             author = cs['author']
                             author = author.split(' <')[0].strip()
                             messages.append("%s - %s - %s"
                                 % (revlink, author, desc))
+                        elif bugs and bugs[0] not in group_bugs:
+                            group_bugs.append(bugs[0])
+
+                    if group_changesets:
+                        # Kind of gross, but so is all the above
+                        if 'merge' in desc or 'Merge' in desc:
+                            group += ' - %s' % desc
+                        elif group_bugs:
+                            group += ' (bug%s %s%s)' % (
+                                's' if len(group_bugs) > 1 else '',
+                                ', '.join(str(b) for b in group_bugs[:5]),
+                                ' and %d other bugs' % (len(group_bugs) - 5)
+                                if len(group_bugs) > 5 else ''
+                            )
+                        messages.append(group)
             except:
                 self.msg(self.config.core.owner, self.config.core.owner,
                     "Failure on %s:" % push_url)
