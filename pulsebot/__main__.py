@@ -11,7 +11,6 @@ from treestatus import (
     UnknownBranch,
 )
 from pulse_dispatch import PulseDispatcher
-from pulse import PulseListener
 import os
 
 
@@ -23,20 +22,11 @@ if not config.parser.has_option('pulse', 'user'):
 if not config.parser.has_option('pulse', 'password'):
     raise Exception('Missing configuration: pulse.password')
 
-pulse = PulseListener(
-    config.pulse.user,
-    config.pulse.password,
-    'exchange/hgpushes/v1',
-    '#',
-    config.pulse.applabel
-    if config.parser.has_option('pulse', 'applabel') else None
-)
-
 treestatus = TreeStatus(config.treestatus.server)
 
 bot = Bot(config)
 
-dispatcher = PulseDispatcher(bot.msg, config, pulse)
+dispatcher = PulseDispatcher(bot.msg, config)
 
 for command, where, nick in bot:
     verb, args = command[0], command[1:]
@@ -54,7 +44,6 @@ for command, where, nick in bot:
             except UnknownBranch:
                 bot.msg(where, nick, 'Unknown branch: %s' % branch)
 
-pulse.shutdown()
 dispatcher.shutdown()
 bot.shutdown()
 # Sopel doesn't terminate all its threads, so kill them all

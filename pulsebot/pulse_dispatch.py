@@ -3,11 +3,15 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import logging
+import os
 import re
 import requests
+import sys
 import threading
 import time
 import traceback
+import urlparse
+import unittest
 from collections import (
     defaultdict,
     OrderedDict,
@@ -17,6 +21,7 @@ from pulsebot.bugzilla import (
     Bugzilla,
     BugzillaError,
 )
+from pulsebot.pulse_hgpushes import PulseHgPushes
 
 REVLINK_RE = re.compile('/rev/[^/]*$')
 
@@ -50,10 +55,10 @@ BACKOUT_RE = re.compile(r'^back(?:ed)? ?out', re.I)
 class PulseDispatcher(object):
     instance = None
 
-    def __init__(self, msg, config, pulse):
+    def __init__(self, msg, config):
         self.msg = msg
         self.config = config
-        self.pulse = pulse
+        self.hgpushes = PulseHgPushes(config)
         self.dispatch = defaultdict(set)
         self.max_checkins = 10
         self.shutting_down = False
@@ -92,104 +97,77 @@ class PulseDispatcher(object):
             self.bugzilla_thread.start()
 
     def change_reporter(self):
-        for message in self.pulse:
-            self._change_reporter(message)
+        for push in self.hgpushes:
+            url = urlparse.urlparse(push['pushlog'])
+            branch = os.path.dirname(url.path).strip('/')
 
-    def _change_reporter(self, pulse_message):
-        # Sanity checks
-        try:
-            payload = pulse_message.get('payload', {})
-            repo = payload.get('repo_url')
-            pushes = payload.get('pushlog_pushes')
-            meta = pulse_message.get('_meta', {})
-            branch = meta.get('routing_key')
-            if not (repo and pushes and branch):
-                return
-        except Exception as e:
-            return
-
-        for push in pushes:
-            push_url = push.get('push_full_json_url')
-            if not push_url:
-                continue
-
-            base_url, params = push_url.split('?')
-            params = OrderedDict(p.split('=', 1) for p in params.split('&'))
-            params = '&'.join('%s=%s' % (k, v)
-                              for k, v in params.iteritems()
-                              if k not in ('version', 'full'))
-
-            messages = []
-            urls_for_bugs = defaultdict(list)
-            try:
-                r = requests.get(push_url)
-                if r.status_code == 500:
-                    # If we got an error 500, try again once.
-                    r = requests.get(push_url)
-                if r.status_code != 200:
-                    r.raise_for_status()
-
-                data = r.json()
-
-                for d in data.get('pushes', {}).values():
-                    changesets = d['changesets']
-                    group_changesets = len(changesets) > self.max_checkins
-                    if group_changesets:
-                        group = ('%s/pushloghtml?%s - %d changesets'
-                                 % (repo, params, len(changesets)))
-                        group_bugs = []
-
-                    for cs in changesets:
-                        short_node = cs['node'][:12]
-                        revlink = '%s/rev/%s' \
-                            % (repo, short_node)
-                        desc = cs['desc'].splitlines()[0].strip()
-
-                        for_bugzilla = (self.bugzilla and
-                                        branch in self.bugzilla_branches)
-                        if for_bugzilla or group_changesets:
-                            bugs = parse_bugs(desc)
-                        if for_bugzilla and bugs:
-                            urls_for_bugs[bugs[0]].append((
-                                revlink,
-                                bool(BACKOUT_RE.match(desc)),
-                            ))
-
-                        if not group_changesets:
-                            author = cs['author']
-                            author = author.split(' <')[0].strip()
-                            messages.append("%s - %s - %s"
-                                % (revlink, author, desc))
-                        elif bugs and bugs[0] not in group_bugs:
-                            group_bugs.append(bugs[0])
-
-                    if group_changesets:
-                        # Kind of gross, but so is all the above
-                        if 'merge' in desc or 'Merge' in desc:
-                            group += ' - %s' % desc
-                        elif group_bugs:
-                            group += ' (bug%s %s%s)' % (
-                                's' if len(group_bugs) > 1 else '',
-                                ', '.join(str(b) for b in group_bugs[:5]),
-                                ' and %d other bugs' % (len(group_bugs) - 5)
-                                if len(group_bugs) > 5 else ''
-                            )
-                        messages.append(group)
-            except:
-                logger = logging.getLogger('pulsebot.dispatch')
-                logger.error("Failure on %s", push_url)
-                for line in traceback.format_exc().splitlines():
-                    logger.debug(line)
-                logger.debug("Message data was: %r", pulse_message)
-                continue
-
-            for msg in messages:
+            for msg in self.create_messages(push, self.max_checkins):
                 for chan in self.dispatch.get(branch, set()) | \
                         self.dispatch.get('*', set()):
                     self.msg(chan, chan, "Check-in: %s" % msg)
 
-            for bug, urls in urls_for_bugs.iteritems():
-                self.bugzilla_queue.put((bug, urls))
+            if self.bugzilla and branch in self.bugzilla_branches:
+                for bug, urls in self.munge_for_bugzilla(push):
+                    self.bugzilla_queue.put((bug, urls))
+
+    @staticmethod
+    def create_messages(push, max_checkins=sys.maxsize, max_bugs=5):
+        max_bugs = max(1, max_bugs)
+        changesets = push['changesets']
+        group = ''
+        group_bugs = []
+
+        # Kind of gross
+        last_desc = changesets[-1]['desc'] if changesets else ''
+        merge = 'merge' in last_desc or 'Merge' in last_desc
+
+        group_changesets = merge or len(changesets) > max_checkins
+
+        if not merge:
+            for cs in changesets:
+                revlink = cs['revlink']
+                desc = cs['desc']
+
+                if group_changesets:
+                    bugs = parse_bugs(desc)
+                    if bugs and bugs[0] not in group_bugs:
+                        group_bugs.append(bugs[0])
+                else:
+                    author = cs['author']
+                    yield "%s - %s - %s" % (revlink, author, desc)
+
+        if group_changesets:
+            group = '%s - %d changesets' % (push['pushlog'], len(changesets))
+
+        if merge:
+            group += ' - %s' % last_desc
+
+        if group:
+            if group_bugs and not merge:
+                group += ' (bug%s %s%s)' % (
+                    's' if len(group_bugs) > 1 else '',
+                    ', '.join(str(b) for b in group_bugs[:max_bugs]),
+                    ' and %d other bug%s' % (
+                        len(group_bugs) - max_bugs,
+                        's' if len(group_bugs) > max_bugs + 1 else ''
+                    ) if len(group_bugs) > max_bugs else ''
+                )
+            yield group
+
+    @staticmethod
+    def munge_for_bugzilla(push):
+        urls_for_bugs = defaultdict(list)
+
+        for cs in push['changesets']:
+            bugs = parse_bugs(cs['desc'])
+            if bugs:
+                urls_for_bugs[bugs[0]].append((
+                    cs['revlink'],
+                    bool(BACKOUT_RE.match(cs['desc'])),
+                ))
+
+        for bug, urls in urls_for_bugs.iteritems():
+            yield bug, urls
 
     def bugzilla_reporter(self):
         delayed_comments = []
@@ -273,6 +251,145 @@ class PulseDispatcher(object):
                         "Failed to send comment to bug %d", bug)
 
     def shutdown(self):
+        self.hgpushes.shutdown()
         self.reporter_thread.join()
         self.shutting_down = True
         self.bugzilla_thread.join()
+
+
+class TestPulseDispatcher(unittest.TestCase):
+    CHANGESETS = [{
+        'author': "Ann O'nymous",
+        'revlink': 'https://server/repo/rev/1234567890ab',
+        'desc': 'Bug 42 - Changed something',
+    }, {
+        'author': "Ann O'nymous",
+        'revlink': 'https://server/repo/rev/234567890abc',
+        'desc': 'Fixup for bug 42 - Changed something else',
+    }, {
+        'author': 'Anon Ymous',
+        'revlink': 'https://server/repo/rev/34567890abcd',
+        'desc': 'Bug 43 - Lorem ipsum',
+    }, {
+        'author': 'Anon Ymous',
+        'revlink': 'https://server/repo/rev/4567890abcde',
+        'desc': 'Bug 43 - dolor sit amet',
+    }, {
+        'author': 'Anon Ymous',
+        'revlink': 'https://server/repo/rev/567890abcdef',
+        'desc': 'Bug 43 - consectetur adipiscing elit',
+    }, {
+        'author': 'Random Bystander',
+        'revlink': 'https://server/repo/rev/67890abcdef0',
+        'desc': 'Bug 44 - Ut enim ad minim veniam',
+    }, {
+        'author': 'Other Bystander',
+        'revlink': 'https://server/repo/rev/7890abcdef01',
+        'desc': 'Bug 45 - Excepteur sint occaecat cupidatat non proident',
+    }, {
+        'author': 'Sheriff',
+        'revlink': 'https://server/repo/rev/890abcdef012',
+        'desc': 'Merge branch into repo',
+    }]
+
+    def test_create_messages(self):
+        push = {
+            'pushlog': 'https://server/repo/pushloghtml?startID=1&endID=2',
+            'changesets': self.CHANGESETS[:1],
+        }
+        result = [
+            "https://server/repo/rev/1234567890ab - Ann O'nymous - "
+            'Bug 42 - Changed something',
+        ]
+        self.assertEquals(list(PulseDispatcher.create_messages(push)), result)
+
+        push['changesets'].append(self.CHANGESETS[1])
+        result.append(
+            "https://server/repo/rev/234567890abc - Ann O'nymous - "
+            'Fixup for bug 42 - Changed something else',
+        )
+        self.assertEquals(list(PulseDispatcher.create_messages(push)), result)
+
+        push['changesets'].extend(self.CHANGESETS[2:5])
+        result.extend((
+            'https://server/repo/rev/34567890abcd - Anon Ymous - '
+            'Bug 43 - Lorem ipsum',
+            'https://server/repo/rev/4567890abcde - Anon Ymous - '
+            'Bug 43 - dolor sit amet',
+            'https://server/repo/rev/567890abcdef - Anon Ymous - '
+            'Bug 43 - consectetur adipiscing elit',
+        ))
+        self.assertEquals(list(PulseDispatcher.create_messages(push)), result)
+
+        self.assertEquals(list(PulseDispatcher.create_messages(push, 5)), result)
+
+        push['changesets'].append(self.CHANGESETS[5])
+        self.assertEquals(list(PulseDispatcher.create_messages(push, 5)), [
+            'https://server/repo/pushloghtml?startID=1&endID=2 - 6 changesets '
+            '(bugs 42, 43, 44)'
+        ])
+        self.assertEquals(list(PulseDispatcher.create_messages(push, 5, 1)), [
+            'https://server/repo/pushloghtml?startID=1&endID=2 - 6 changesets '
+            '(bugs 42 and 2 other bugs)'
+        ])
+        self.assertEquals(list(PulseDispatcher.create_messages(push, 5, 2)), [
+            'https://server/repo/pushloghtml?startID=1&endID=2 - 6 changesets '
+            '(bugs 42, 43 and 1 other bug)'
+        ])
+
+        push['changesets'].append(self.CHANGESETS[6])
+        self.assertEquals(list(PulseDispatcher.create_messages(push, 5)), [
+            'https://server/repo/pushloghtml?startID=1&endID=2 - 7 changesets '
+            '(bugs 42, 43, 44, 45)'
+        ])
+        self.assertEquals(list(PulseDispatcher.create_messages(push, 5, 1)), [
+            'https://server/repo/pushloghtml?startID=1&endID=2 - 7 changesets '
+            '(bugs 42 and 3 other bugs)'
+        ])
+        self.assertEquals(list(PulseDispatcher.create_messages(push, 5, 2)), [
+            'https://server/repo/pushloghtml?startID=1&endID=2 - 7 changesets '
+            '(bugs 42, 43 and 2 other bugs)'
+        ])
+
+        push['changesets'].append(self.CHANGESETS[7])
+        self.assertEquals(list(PulseDispatcher.create_messages(push, 5)), [
+            'https://server/repo/pushloghtml?startID=1&endID=2 - 8 changesets '
+            '- Merge branch into repo'
+        ])
+        # Merges are always grouped
+        self.assertEquals(list(PulseDispatcher.create_messages(push)), [
+            'https://server/repo/pushloghtml?startID=1&endID=2 - 8 changesets '
+            '- Merge branch into repo'
+        ])
+
+    def test_munge_for_bugzilla(self):
+        push = {
+            'pushlog': 'https://server/repo/pushloghtml?startID=1&endID=2',
+            'changesets': self.CHANGESETS[:1],
+        }
+        result = {
+            42: [('https://server/repo/rev/1234567890ab', False)],
+        }
+        self.assertEquals(dict(PulseDispatcher.munge_for_bugzilla(push)), result)
+
+        push['changesets'].append(self.CHANGESETS[1])
+        result[42].append(('https://server/repo/rev/234567890abc', False))
+        self.assertEquals(dict(PulseDispatcher.munge_for_bugzilla(push)), result)
+
+        push['changesets'].extend(self.CHANGESETS[2:5])
+        result[43] = [
+            ('https://server/repo/rev/34567890abcd', False),
+            ('https://server/repo/rev/4567890abcde', False),
+            ('https://server/repo/rev/567890abcdef', False),
+        ]
+        self.assertEquals(dict(PulseDispatcher.munge_for_bugzilla(push)), result)
+
+        push['changesets'].append({
+            'author': 'Sheriff',
+            'revlink': 'https://server/repo/rev/90abcdef0123',
+            'desc': 'Backout bug 41 for bustage',
+        })
+        result[41] = [
+            ('https://server/repo/rev/90abcdef0123', True),
+        ]
+        self.assertEquals(dict(PulseDispatcher.munge_for_bugzilla(push)), result)
