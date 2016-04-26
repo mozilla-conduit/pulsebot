@@ -22,7 +22,7 @@ host = irc.mozilla.org
 use_ssl = True
 port = 6697
 owner = glandium
-channels = #pulsebot,#bugs,#developers,#tb-bugs
+channels = #pulsebot,#bugs,#developers,#tb-bugs,#mozreview,#vcs
 user = pulsebot
 name = pulsebot
 prefix =
@@ -31,7 +31,7 @@ verify_ssl = True
 timeout = 120
 
 [pulse]
-channels = #pulsebot,#bugs,#developers,#tb-bugs
+channels = #pulsebot,#bugs,#developers,#tb-bugs,#mozreview,#vcs
 user = pulsebot
 password = pulse-password-for-pulsebot
 
@@ -41,6 +41,8 @@ developers = integration/b2g-inbound,integration/fx-team,releases/mozilla-aurora
 fx-team = integration/fx-team
 media = projects/alder
 tb-bugs = releases/comm-aurora,releases/comm-beta,comm-central
+mozreview = hgcustom/version-control-tools
+vcs = hgcustom/version-control-tools
 
 [treestatus]
 server = https://api.pub.build.mozilla.org/treestatus/trees
