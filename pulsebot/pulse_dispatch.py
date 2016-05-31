@@ -186,6 +186,11 @@ class PulseDispatcher(object):
         for info in info_for_bugs.itervalues():
             yield info
 
+    @staticmethod
+    def bugzilla_summary(cs):
+        yield cs['revlink']
+        yield cs['desc']
+
     def bugzilla_reporter(self):
         delayed_comments = []
         def get_one():
@@ -231,17 +236,11 @@ class PulseDispatcher(object):
                             yield 'Backout by %s:' % info.pusher
                         else:
                             yield 'Backout:'
-                        for cs in cs_to_write:
-                            yield cs['revlink']
-                    else:
-                        if info.pusher:
-                            yield 'Pushed by %s:' % info.pusher
-                        for cs in cs_to_write:
-                            url = cs['revlink']
-                            if cs['is_backout']:
-                                yield '%s (backout)' % url
-                            else:
-                                yield url
+                    elif info.pusher:
+                        yield 'Pushed by %s:' % info.pusher
+                    for cs in cs_to_write:
+                        for line in self.bugzilla_summary(cs):
+                            yield line
 
                 try:
                     fields = ('whiteboard', 'keywords')
@@ -480,14 +479,17 @@ class TestPulseDispatcher(unittest.TestCase):
         }
         result = {
             42: ['Pushed by foo@bar.com:\n'
-                 'https://server/repo/rev/1234567890ab'],
+                 'https://server/repo/rev/1234567890ab\n'
+                 'Bug 42 - Changed something'],
         }
         do_push(push)
         self.assertEquals(comments, result)
 
         comments.clear()
         push['changesets'].append(self.CHANGESETS[1])
-        result[42][0] += '\n' + 'https://server/repo/rev/234567890abc'
+        result[42][0] += ('\n'
+            'https://server/repo/rev/234567890abc\n'
+            'Fixup for bug 42 - Changed something else')
         do_push(push)
         self.assertEquals(comments, result)
 
@@ -496,8 +498,11 @@ class TestPulseDispatcher(unittest.TestCase):
         result[43] = [
             'Pushed by foo@bar.com:\n'
             'https://server/repo/rev/34567890abcd\n'
+            'Bug 43 - Lorem ipsum\n'
             'https://server/repo/rev/4567890abcde\n'
-            'https://server/repo/rev/567890abcdef'
+            'Bug 43 - dolor sit amet\n'
+            'https://server/repo/rev/567890abcdef\n'
+            'Bug 43 - consectetur adipiscing elit'
         ]
         do_push(push)
         self.assertEquals(comments, result)
@@ -509,7 +514,8 @@ class TestPulseDispatcher(unittest.TestCase):
         })
         result[41] = [
             'Backout by foo@bar.com:\n'
-            'https://server/repo/rev/90abcdef0123',
+            'https://server/repo/rev/90abcdef0123\n'
+            'Backout bug 41 for bustage',
         ]
         do_push(push)
         self.assertEquals(comments, result)
