@@ -365,6 +365,7 @@ class TestPulseDispatcher(unittest.TestCase):
     def test_munge_for_bugzilla(self):
         push = {
             'pushlog': 'https://server/repo/pushloghtml?startID=1&endID=2',
+            'user': 'foo@bar.com',
             'changesets': self.CHANGESETS[:1],
         }
         result = {

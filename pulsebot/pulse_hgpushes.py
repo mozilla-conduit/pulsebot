@@ -61,6 +61,7 @@ class PulseHgPushes(PulseListener):
                     push_data = {
                         'pushlog': '%s/pushloghtml?startID=%d&endID=%d'
                         % (repo, id - 1, id),
+                        'user': d.get('user'),
                         'changesets': [],
                     }
 
@@ -93,6 +94,7 @@ class TestPushesInfo(unittest.TestCase):
             'pushlog':
                 'https://hg.mozilla.org/integration//mozilla-inbound/'
                 'pushloghtml?startID=5&endID=6',
+            'user': 'eakhgari@mozilla.com',
             'changesets': [{
                 'author': 'Rafael Ávila de Espíndola',
                 'revlink':
@@ -106,6 +108,7 @@ class TestPushesInfo(unittest.TestCase):
             'pushlog':
                 'https://hg.mozilla.org/integration//mozilla-inbound/'
                 'pushloghtml?startID=6&endID=7',
+            'user': 'rocallahan@mozilla.com',
             'changesets': [{
                 'author': "Robert O'Callahan",
                 'revlink':
