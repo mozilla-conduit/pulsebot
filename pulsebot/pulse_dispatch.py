@@ -52,6 +52,21 @@ def parse_bugs(s):
 BACKOUT_RE = re.compile(r'^back(?:ed)? ?out', re.I)
 
 
+class BugInfo(object):
+    def __init__(self):
+        self.changesets = []
+
+    def add_changeset(self, cs):
+        self.changesets.append({
+            'revlink': cs['revlink'],
+            'is_backout': bool(BACKOUT_RE.match(cs['desc'])),
+        })
+
+    def __iter__(self):
+        for cs in self.changesets:
+            yield cs['revlink'], cs['is_backout']
+
+
 class PulseDispatcher(object):
     instance = None
 
@@ -156,15 +171,12 @@ class PulseDispatcher(object):
 
     @staticmethod
     def munge_for_bugzilla(push):
-        info_for_bugs = defaultdict(list)
+        info_for_bugs = defaultdict(BugInfo)
 
         for cs in push['changesets']:
             bugs = parse_bugs(cs['desc'])
             if bugs:
-                info_for_bugs[bugs[0]].append((
-                    cs['revlink'],
-                    bool(BACKOUT_RE.match(cs['desc'])),
-                ))
+                info_for_bugs[bugs[0]].add_changeset(cs)
 
         for bug, info in info_for_bugs.iteritems():
             yield bug, info
@@ -363,6 +375,12 @@ class TestPulseDispatcher(unittest.TestCase):
         ])
 
     def test_munge_for_bugzilla(self):
+        def munge(push):
+            return {
+                k: list(v)
+                for k, v in PulseDispatcher.munge_for_bugzilla(push)
+            }
+
         push = {
             'pushlog': 'https://server/repo/pushloghtml?startID=1&endID=2',
             'user': 'foo@bar.com',
@@ -371,11 +389,11 @@ class TestPulseDispatcher(unittest.TestCase):
         result = {
             42: [('https://server/repo/rev/1234567890ab', False)],
         }
-        self.assertEquals(dict(PulseDispatcher.munge_for_bugzilla(push)), result)
+        self.assertEquals(munge(push), result)
 
         push['changesets'].append(self.CHANGESETS[1])
         result[42].append(('https://server/repo/rev/234567890abc', False))
-        self.assertEquals(dict(PulseDispatcher.munge_for_bugzilla(push)), result)
+        self.assertEquals(munge(push), result)
 
         push['changesets'].extend(self.CHANGESETS[2:5])
         result[43] = [
@@ -383,7 +401,7 @@ class TestPulseDispatcher(unittest.TestCase):
             ('https://server/repo/rev/4567890abcde', False),
             ('https://server/repo/rev/567890abcdef', False),
         ]
-        self.assertEquals(dict(PulseDispatcher.munge_for_bugzilla(push)), result)
+        self.assertEquals(munge(push), result)
 
         push['changesets'].append({
             'author': 'Sheriff',
@@ -393,4 +411,4 @@ class TestPulseDispatcher(unittest.TestCase):
         result[41] = [
             ('https://server/repo/rev/90abcdef0123', True),
         ]
-        self.assertEquals(dict(PulseDispatcher.munge_for_bugzilla(push)), result)
+        self.assertEquals(munge(push), result)
