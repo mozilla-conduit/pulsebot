@@ -61,6 +61,7 @@ class BugInfo(object):
     def add_changeset(self, cs):
         self.changesets.append({
             'revlink': cs['revlink'],
+            'desc': cs['desc'],
             'is_backout': bool(BACKOUT_RE.match(cs['desc'])),
         })
 
@@ -398,22 +399,27 @@ class TestPulseDispatcher(unittest.TestCase):
         }
         result = {
             42: [{'revlink': 'https://server/repo/rev/1234567890ab',
+                  'desc': 'Bug 42 - Changed something',
                   'is_backout': False}],
         }
         self.assertEquals(munge(push), result)
 
         push['changesets'].append(self.CHANGESETS[1])
         result[42].append({'revlink': 'https://server/repo/rev/234567890abc',
+                           'desc': 'Fixup for bug 42 - Changed something else',
                            'is_backout': False})
         self.assertEquals(munge(push), result)
 
         push['changesets'].extend(self.CHANGESETS[2:5])
         result[43] = [
             {'revlink': 'https://server/repo/rev/34567890abcd',
+             'desc': 'Bug 43 - Lorem ipsum',
              'is_backout': False},
             {'revlink': 'https://server/repo/rev/4567890abcde',
+             'desc': 'Bug 43 - dolor sit amet',
              'is_backout': False},
             {'revlink': 'https://server/repo/rev/567890abcdef',
+             'desc': 'Bug 43 - consectetur adipiscing elit',
              'is_backout': False},
         ]
         self.assertEquals(munge(push), result)
@@ -425,6 +431,7 @@ class TestPulseDispatcher(unittest.TestCase):
         })
         result[41] = [
             {'revlink': 'https://server/repo/rev/90abcdef0123',
+             'desc': 'Backout bug 41 for bustage',
              'is_backout': True},
         ]
         self.assertEquals(munge(push), result)
