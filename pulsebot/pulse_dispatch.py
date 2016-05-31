@@ -125,7 +125,7 @@ class PulseDispatcher(object):
 
             if self.bugzilla and branch in self.bugzilla_branches:
                 for info in self.munge_for_bugzilla(push):
-                    self.bugzilla_queue.put((info.bug, info))
+                    self.bugzilla_queue.put(info)
 
     @staticmethod
     def create_messages(push, max_checkins=sys.maxsize, max_bugs=5):
@@ -189,25 +189,25 @@ class PulseDispatcher(object):
         delayed_comments = []
         def get_one():
             if delayed_comments:
-                when, bug, info = delayed_comments[0]
+                when, info = delayed_comments[0]
                 if when <= time.time():
                     delayed_comments.pop(0)
-                    return bug, info, True
+                    return info, True
             try:
-                bug, info = self.bugzilla_queue.get(timeout=1)
-                return bug, info, False
+                info = self.bugzilla_queue.get(timeout=1)
+                return info, False
             except Empty:
-                return None, None, None
+                return None, None
 
         while True:
-            bug, info, delayed = get_one()
-            if bug is None:
+            info, delayed = get_one()
+            if info is None:
                 if self.shutting_down:
                     break
                 continue
 
             try:
-                comments = '\n'.join(self.bugzilla.get_comments(bug))
+                comments = '\n'.join(self.bugzilla.get_comments(info.bug))
             except BugzillaError:
                 # Don't do anything on errors, such as "You are not authorized
                 # to access bug #xxxxx".
@@ -242,7 +242,7 @@ class PulseDispatcher(object):
 
                 try:
                     fields = ('whiteboard', 'keywords')
-                    values = self.bugzilla.get_fields(bug, fields)
+                    values = self.bugzilla.get_fields(info.bug, fields)
                     # Delay comments for backouts and checkin-needed in
                     # whiteboard
                     delay_comment = (
@@ -252,7 +252,7 @@ class PulseDispatcher(object):
                     )
                     if delay_comment:
                         delayed_comments.append(
-                            (time.time() + self.backout_delay, bug, info))
+                            (time.time() + self.backout_delay, info))
                     else:
                         message = '\n'.join(comment())
                         kwargs = {}
@@ -262,12 +262,12 @@ class PulseDispatcher(object):
                             }
                         if kwargs:
                             kwargs['comment'] = {'body': message}
-                            self.bugzilla.update_bug(bug, **kwargs)
+                            self.bugzilla.update_bug(info.bug, **kwargs)
                         else:
-                            self.bugzilla.post_comment(bug, message)
+                            self.bugzilla.post_comment(info.bug, message)
                 except:
                     logging.getLogger('pulsebot.buzilla').error(
-                        "Failed to send comment to bug %d", bug)
+                        "Failed to send comment to bug %d", info.bug)
 
     def shutdown(self):
         self.hgpushes.shutdown()
@@ -458,9 +458,9 @@ class TestPulseDispatcher(unittest.TestCase):
             dispatcher = TestPulseDispatcher()
             try:
                 for info in dispatcher.munge_for_bugzilla(push):
-                    dispatcher.bugzilla_queue.put((info.bug, info))
+                    dispatcher.bugzilla_queue.put(info)
             finally:
-                dispatcher.bugzilla_queue.put((None, None))
+                dispatcher.bugzilla_queue.put(None)
                 dispatcher.shutdown()
 
         push = {
