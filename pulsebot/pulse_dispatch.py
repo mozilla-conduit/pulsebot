@@ -78,6 +78,7 @@ class PulseDispatcher(object):
         self.dispatch = defaultdict(set)
         self.max_checkins = 10
         self.shutting_down = False
+        self.backout_delay = 600
 
         if (config.parser.has_option('bugzilla', 'server')
                 and config.parser.has_option('bugzilla', 'password')
@@ -250,7 +251,8 @@ class PulseDispatcher(object):
                              or 'checkin-needed' in values.get('whiteboard', ''))
                     )
                     if delay_comment:
-                        delayed_comments.append((time.time() + 600, bug, info))
+                        delayed_comments.append(
+                            (time.time() + self.backout_delay, bug, info))
                     else:
                         message = '\n'.join(comment())
                         kwargs = {}
@@ -423,3 +425,79 @@ class TestPulseDispatcher(unittest.TestCase):
              'is_backout': True},
         ]
         self.assertEquals(munge(push), result)
+
+    def test_bugzilla_reporter(self):
+        comments = defaultdict(list)
+
+        class TestBugzilla(object):
+            def get_comments(self, bug):
+                return comments.get(bug, [])
+
+            def get_fields(self, bug, fields):
+                return {}
+
+            def post_comment(self, bug, message):
+                comments[bug].append(message)
+
+
+        class TestPulseDispatcher(PulseDispatcher):
+            def __init__(self):
+                self.shutting_down = False
+                self.backout_delay = 0
+                self.bugzilla = TestBugzilla()
+                self.bugzilla_queue = Queue(42)
+                self.bugzilla_thread = threading.Thread(
+                    target=self.bugzilla_reporter)
+                self.bugzilla_thread.start()
+
+            def shutdown(self):
+                self.shutting_down = True
+                self.bugzilla_thread.join()
+
+        def do_push(push):
+            dispatcher = TestPulseDispatcher()
+            try:
+                for info in dispatcher.munge_for_bugzilla(push):
+                    dispatcher.bugzilla_queue.put((info.bug, info))
+            finally:
+                dispatcher.bugzilla_queue.put((None, None))
+                dispatcher.shutdown()
+
+        push = {
+            'pushlog': 'https://server/repo/pushloghtml?startID=1&endID=2',
+            'user': 'foo@bar.com',
+            'changesets': self.CHANGESETS[:1],
+        }
+        result = {
+            42: ['https://server/repo/rev/1234567890ab'],
+        }
+        do_push(push)
+        self.assertEquals(comments, result)
+
+        comments.clear()
+        push['changesets'].append(self.CHANGESETS[1])
+        result[42][0] += '\n' + 'https://server/repo/rev/234567890abc'
+        do_push(push)
+        self.assertEquals(comments, result)
+
+        comments.clear()
+        push['changesets'].extend(self.CHANGESETS[2:5])
+        result[43] = [
+            'https://server/repo/rev/34567890abcd\n'
+            'https://server/repo/rev/4567890abcde\n'
+            'https://server/repo/rev/567890abcdef'
+        ]
+        do_push(push)
+        self.assertEquals(comments, result)
+
+        push['changesets'].append({
+            'author': 'Sheriff',
+            'revlink': 'https://server/repo/rev/90abcdef0123',
+            'desc': 'Backout bug 41 for bustage',
+        })
+        result[41] = [
+            'Backout:\n'
+            'https://server/repo/rev/90abcdef0123',
+        ]
+        do_push(push)
+        self.assertEquals(comments, result)
