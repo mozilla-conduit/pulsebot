@@ -213,34 +213,31 @@ class PulseDispatcher(object):
                 # to access bug #xxxxx".
                 continue
 
-            urls_to_write = []
-            backouts = set()
+            cs_to_write = []
             for cs_info in info:
                 url = cs_info['revlink']
-                is_backout = cs_info['is_backout']
                 # Only write about a changeset if it's never been mentioned
                 # at all. This makes us not emit changesets that e.g. land
                 # on mozilla-inbound when they were mentioned when landing
                 # on mozilla-central.
                 if url[-12:] not in comments:
-                    urls_to_write.append(url)
-                if is_backout:
-                    backouts.add(url)
+                    cs_to_write.append(cs_info)
 
-            if urls_to_write:
+            if cs_to_write:
                 def comment():
-                    if all(url in backouts for url in urls_to_write):
+                    if all(cs['is_backout'] for cs in cs_to_write):
                         if info.pusher:
                             yield 'Backout by %s:' % info.pusher
                         else:
                             yield 'Backout:'
-                        for url in urls_to_write:
-                            yield url
+                        for cs in cs_to_write:
+                            yield cs['revlink']
                     else:
                         if info.pusher:
                             yield 'Pushed by %s:' % info.pusher
-                        for url in urls_to_write:
-                            if url in backouts:
+                        for cs in cs_to_write:
+                            url = cs['revlink']
+                            if cs['is_backout']:
                                 yield '%s (backout)' % url
                             else:
                                 yield url
@@ -252,7 +249,7 @@ class PulseDispatcher(object):
                     # whiteboard
                     delay_comment = (
                         not delayed
-                        and (all(url in backouts for url in urls_to_write)
+                        and (all(cs['is_backout'] for cs in cs_to_write)
                              or 'checkin-needed' in values.get('whiteboard', ''))
                     )
                     if delay_comment:
@@ -271,6 +268,7 @@ class PulseDispatcher(object):
                         else:
                             self.bugzilla.post_comment(info.bug, message)
                 except:
+                    raise
                     logging.getLogger('pulsebot.buzilla').error(
                         "Failed to send comment to bug %d", info.bug)
 
