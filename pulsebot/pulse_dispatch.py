@@ -63,8 +63,7 @@ class BugInfo(object):
         })
 
     def __iter__(self):
-        for cs in self.changesets:
-            yield cs['revlink'], cs['is_backout']
+        return iter(self.changesets)
 
 
 class PulseDispatcher(object):
@@ -211,7 +210,9 @@ class PulseDispatcher(object):
 
             urls_to_write = []
             backouts = set()
-            for url, is_backout in info:
+            for cs_info in info:
+                url = cs_info['revlink']
+                is_backout = cs_info['is_backout']
                 # Only write about a changeset if it's never been mentioned
                 # at all. This makes us not emit changesets that e.g. land
                 # on mozilla-inbound when they were mentioned when landing
@@ -387,19 +388,24 @@ class TestPulseDispatcher(unittest.TestCase):
             'changesets': self.CHANGESETS[:1],
         }
         result = {
-            42: [('https://server/repo/rev/1234567890ab', False)],
+            42: [{'revlink': 'https://server/repo/rev/1234567890ab',
+                  'is_backout': False}],
         }
         self.assertEquals(munge(push), result)
 
         push['changesets'].append(self.CHANGESETS[1])
-        result[42].append(('https://server/repo/rev/234567890abc', False))
+        result[42].append({'revlink': 'https://server/repo/rev/234567890abc',
+                           'is_backout': False})
         self.assertEquals(munge(push), result)
 
         push['changesets'].extend(self.CHANGESETS[2:5])
         result[43] = [
-            ('https://server/repo/rev/34567890abcd', False),
-            ('https://server/repo/rev/4567890abcde', False),
-            ('https://server/repo/rev/567890abcdef', False),
+            {'revlink': 'https://server/repo/rev/34567890abcd',
+             'is_backout': False},
+            {'revlink': 'https://server/repo/rev/4567890abcde',
+             'is_backout': False},
+            {'revlink': 'https://server/repo/rev/567890abcdef',
+             'is_backout': False},
         ]
         self.assertEquals(munge(push), result)
 
@@ -409,6 +415,7 @@ class TestPulseDispatcher(unittest.TestCase):
             'desc': 'Backout bug 41 for bustage',
         })
         result[41] = [
-            ('https://server/repo/rev/90abcdef0123', True),
+            {'revlink': 'https://server/repo/rev/90abcdef0123',
+             'is_backout': True},
         ]
         self.assertEquals(munge(push), result)
