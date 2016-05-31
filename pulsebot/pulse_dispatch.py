@@ -53,7 +53,9 @@ BACKOUT_RE = re.compile(r'^back(?:ed)? ?out', re.I)
 
 
 class BugInfo(object):
-    def __init__(self):
+    def __init__(self, bug, pusher):
+        self.bug = bug
+        self.pusher = pusher
         self.changesets = []
 
     def add_changeset(self, cs):
@@ -121,8 +123,8 @@ class PulseDispatcher(object):
                     self.msg(chan, chan, "Check-in: %s" % msg)
 
             if self.bugzilla and branch in self.bugzilla_branches:
-                for bug, info in self.munge_for_bugzilla(push):
-                    self.bugzilla_queue.put((bug, info))
+                for info in self.munge_for_bugzilla(push):
+                    self.bugzilla_queue.put((info.bug, info))
 
     @staticmethod
     def create_messages(push, max_checkins=sys.maxsize, max_bugs=5):
@@ -170,15 +172,17 @@ class PulseDispatcher(object):
 
     @staticmethod
     def munge_for_bugzilla(push):
-        info_for_bugs = defaultdict(BugInfo)
+        info_for_bugs = {}
 
         for cs in push['changesets']:
             bugs = parse_bugs(cs['desc'])
             if bugs:
+                if bugs[0] not in info_for_bugs:
+                    info_for_bugs[bugs[0]] = BugInfo(bugs[0], push['user'])
                 info_for_bugs[bugs[0]].add_changeset(cs)
 
-        for bug, info in info_for_bugs.iteritems():
-            yield bug, info
+        for info in info_for_bugs.itervalues():
+            yield info
 
     def bugzilla_reporter(self):
         delayed_comments = []
@@ -378,8 +382,8 @@ class TestPulseDispatcher(unittest.TestCase):
     def test_munge_for_bugzilla(self):
         def munge(push):
             return {
-                k: list(v)
-                for k, v in PulseDispatcher.munge_for_bugzilla(push)
+                info.bug: list(info)
+                for info in PulseDispatcher.munge_for_bugzilla(push)
             }
 
         push = {
