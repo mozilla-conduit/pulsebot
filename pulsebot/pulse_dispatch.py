@@ -230,10 +230,15 @@ class PulseDispatcher(object):
             if urls_to_write:
                 def comment():
                     if all(url in backouts for url in urls_to_write):
-                        yield 'Backout:'
+                        if info.pusher:
+                            yield 'Backout by %s:' % info.pusher
+                        else:
+                            yield 'Backout:'
                         for url in urls_to_write:
                             yield url
                     else:
+                        if info.pusher:
+                            yield 'Pushed by %s:' % info.pusher
                         for url in urls_to_write:
                             if url in backouts:
                                 yield '%s (backout)' % url
@@ -469,7 +474,8 @@ class TestPulseDispatcher(unittest.TestCase):
             'changesets': self.CHANGESETS[:1],
         }
         result = {
-            42: ['https://server/repo/rev/1234567890ab'],
+            42: ['Pushed by foo@bar.com:\n'
+                 'https://server/repo/rev/1234567890ab'],
         }
         do_push(push)
         self.assertEquals(comments, result)
@@ -483,6 +489,7 @@ class TestPulseDispatcher(unittest.TestCase):
         comments.clear()
         push['changesets'].extend(self.CHANGESETS[2:5])
         result[43] = [
+            'Pushed by foo@bar.com:\n'
             'https://server/repo/rev/34567890abcd\n'
             'https://server/repo/rev/4567890abcde\n'
             'https://server/repo/rev/567890abcdef'
@@ -496,7 +503,7 @@ class TestPulseDispatcher(unittest.TestCase):
             'desc': 'Backout bug 41 for bustage',
         })
         result[41] = [
-            'Backout:\n'
+            'Backout by foo@bar.com:\n'
             'https://server/repo/rev/90abcdef0123',
         ]
         do_push(push)
