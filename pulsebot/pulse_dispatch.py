@@ -107,8 +107,8 @@ class PulseDispatcher(object):
                     self.msg(chan, chan, "Check-in: %s" % msg)
 
             if self.bugzilla and branch in self.bugzilla_branches:
-                for bug, urls in self.munge_for_bugzilla(push):
-                    self.bugzilla_queue.put((bug, urls))
+                for bug, info in self.munge_for_bugzilla(push):
+                    self.bugzilla_queue.put((bug, info))
 
     @staticmethod
     def create_messages(push, max_checkins=sys.maxsize, max_bugs=5):
@@ -156,35 +156,35 @@ class PulseDispatcher(object):
 
     @staticmethod
     def munge_for_bugzilla(push):
-        urls_for_bugs = defaultdict(list)
+        info_for_bugs = defaultdict(list)
 
         for cs in push['changesets']:
             bugs = parse_bugs(cs['desc'])
             if bugs:
-                urls_for_bugs[bugs[0]].append((
+                info_for_bugs[bugs[0]].append((
                     cs['revlink'],
                     bool(BACKOUT_RE.match(cs['desc'])),
                 ))
 
-        for bug, urls in urls_for_bugs.iteritems():
-            yield bug, urls
+        for bug, info in info_for_bugs.iteritems():
+            yield bug, info
 
     def bugzilla_reporter(self):
         delayed_comments = []
         def get_one():
             if delayed_comments:
-                when, bug, urls = delayed_comments[0]
+                when, bug, info = delayed_comments[0]
                 if when <= time.time():
                     delayed_comments.pop(0)
-                    return bug, urls, True
+                    return bug, info, True
             try:
-                bug, urls = self.bugzilla_queue.get(timeout=1)
-                return bug, urls, False
+                bug, info = self.bugzilla_queue.get(timeout=1)
+                return bug, info, False
             except Empty:
                 return None, None, None
 
         while True:
-            bug, urls, delayed = get_one()
+            bug, info, delayed = get_one()
             if bug is None:
                 if self.shutting_down:
                     break
@@ -199,7 +199,7 @@ class PulseDispatcher(object):
 
             urls_to_write = []
             backouts = set()
-            for url, is_backout in urls:
+            for url, is_backout in info:
                 # Only write about a changeset if it's never been mentioned
                 # at all. This makes us not emit changesets that e.g. land
                 # on mozilla-inbound when they were mentioned when landing
@@ -233,7 +233,7 @@ class PulseDispatcher(object):
                              or 'checkin-needed' in values.get('whiteboard', ''))
                     )
                     if delay_comment:
-                        delayed_comments.append((time.time() + 600, bug, urls))
+                        delayed_comments.append((time.time() + 600, bug, info))
                     else:
                         message = '\n'.join(comment())
                         kwargs = {}
