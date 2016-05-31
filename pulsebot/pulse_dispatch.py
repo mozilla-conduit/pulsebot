@@ -189,7 +189,24 @@ class PulseDispatcher(object):
     @staticmethod
     def bugzilla_summary(cs):
         yield cs['revlink']
-        yield cs['desc']
+
+        desc = cs['desc']
+        matches = [m for m in BUG_RE.finditer(desc)
+                   if int(m.group(2)) < 100000000]
+
+        match = matches[0]
+        if match.start() == 0:
+            desc = desc[match.end():].lstrip(' \t-,.:')
+        else:
+            backout = BACKOUT_RE.match(desc)
+            if backout and not desc[backout.end():match.start()].strip():
+                desc = desc[:backout.end()] + desc[match.end():]
+            elif (desc[match.start() - 1] == '(' and
+                  desc[match.end():match.end() + 1] == ')'):
+                desc = (desc[:match.start() - 1].rstrip() + ' ' +
+                        desc[match.end() + 1:].lstrip())
+
+        yield desc
 
     def bugzilla_reporter(self):
         delayed_comments = []
@@ -480,7 +497,7 @@ class TestPulseDispatcher(unittest.TestCase):
         result = {
             42: ['Pushed by foo@bar.com:\n'
                  'https://server/repo/rev/1234567890ab\n'
-                 'Bug 42 - Changed something'],
+                 'Changed something'],
         }
         do_push(push)
         self.assertEquals(comments, result)
@@ -498,11 +515,11 @@ class TestPulseDispatcher(unittest.TestCase):
         result[43] = [
             'Pushed by foo@bar.com:\n'
             'https://server/repo/rev/34567890abcd\n'
-            'Bug 43 - Lorem ipsum\n'
+            'Lorem ipsum\n'
             'https://server/repo/rev/4567890abcde\n'
-            'Bug 43 - dolor sit amet\n'
+            'dolor sit amet\n'
             'https://server/repo/rev/567890abcdef\n'
-            'Bug 43 - consectetur adipiscing elit'
+            'consectetur adipiscing elit'
         ]
         do_push(push)
         self.assertEquals(comments, result)
@@ -515,7 +532,57 @@ class TestPulseDispatcher(unittest.TestCase):
         result[41] = [
             'Backout by foo@bar.com:\n'
             'https://server/repo/rev/90abcdef0123\n'
-            'Backout bug 41 for bustage',
+            'Backout for bustage',
         ]
         do_push(push)
         self.assertEquals(comments, result)
+
+    def test_bugzilla_summary(self):
+        def summary_equals(desc, summary):
+            self.assertEquals(list(PulseDispatcher.bugzilla_summary({
+                'revlink': 'https://server/repo/rev/1234567890ab',
+                'desc': desc,
+            })), [
+                'https://server/repo/rev/1234567890ab',
+                summary,
+            ])
+
+        summary_equals(
+            'Bug 42 - Changed something',
+            'Changed something',
+        )
+
+        summary_equals(
+            'Bug 42: Changed something',
+            'Changed something',
+        )
+
+        summary_equals(
+            'Bug 42. Changed something',
+            'Changed something',
+        )
+
+        summary_equals(
+            'Bug 42 (part 1) - Changed something',
+            '(part 1) - Changed something',
+        )
+
+        summary_equals(
+            'Bug 42, part 1 - Changed something',
+            'part 1 - Changed something',
+        )
+
+        summary_equals(
+            'Fixup for bug 42 - Changed something else',
+            'Fixup for bug 42 - Changed something else',
+        )
+
+        summary_equals(
+            'Backout bug 41 for bustage',
+            'Backout for bustage',
+        )
+
+        summary_equals(
+            'Backed out changeset 234567890abc (bug 41) for bustage',
+            'Backed out changeset 234567890abc for bustage',
+        )
