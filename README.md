@@ -52,6 +52,7 @@ server = https://bugzilla.mozilla.org/
 user = bugzilla-user-for-pulsebot
 password = bugzilla-password-for-pulsebot
 pulse = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,mozilla-central
+leave_open = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,mozilla-central
 ```
 
 The bot can then be started by

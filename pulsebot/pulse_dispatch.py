@@ -57,6 +57,7 @@ class BugInfo(object):
     def __init__(self, bug, pusher):
         self.bug = bug
         self.pusher = pusher
+        self.leave_open = False
         self.changesets = []
 
     def add_changeset(self, cs):
@@ -97,6 +98,7 @@ class PulseDispatcher(object):
         self.hgpushes = PulseHgPushes(config)
         self.dispatch = DispatchConfig()
         self.bugzilla_branches = DispatchConfig()
+        self.bugzilla_leave_open = DispatchConfig()
         self.max_checkins = 10
         self.shutting_down = False
         self.backout_delay = 600
@@ -115,6 +117,10 @@ class PulseDispatcher(object):
             if config.parser.has_option('bugzilla', 'pulse'):
                 for branch in config.bugzilla.get_list('pulse'):
                     self.bugzilla_branches.add(branch)
+
+            if config.parser.has_option('bugzilla', 'leave_open'):
+                for branch in config.bugzilla.get_list('leave_open'):
+                    self.bugzilla_leave_open.add(branch)
 
         if config.parser.has_option('pulse', 'channels'):
             for chan in config.pulse.get_list('channels'):
@@ -149,6 +155,8 @@ class PulseDispatcher(object):
 
             if branch in self.bugzilla_branches:
                 for info in self.munge_for_bugzilla(push):
+                    if branch in self.bugzilla_leave_open:
+                        info.leave_open = True
                     self.bugzilla_queue.put(info)
 
     @staticmethod
@@ -270,8 +278,9 @@ class PulseDispatcher(object):
                     cs_to_write.append(cs_info)
 
             if cs_to_write:
+                is_backout = all(cs['is_backout'] for cs in cs_to_write)
                 def comment():
-                    if all(cs['is_backout'] for cs in cs_to_write):
+                    if is_backout:
                         if info.pusher:
                             yield 'Backout by %s:' % info.pusher
                         else:
@@ -289,7 +298,7 @@ class PulseDispatcher(object):
                     # whiteboard
                     delay_comment = (
                         not delayed
-                        and (all(cs['is_backout'] for cs in cs_to_write)
+                        and (is_backout
                              or 'checkin-needed' in values.get('whiteboard', ''))
                     )
                     if delay_comment:
@@ -302,6 +311,11 @@ class PulseDispatcher(object):
                             kwargs['keywords'] = {
                                 'remove': ['checkin-needed']
                             }
+                        # TODO: reopen closed bugs on backout
+                        if (not is_backout and not info.leave_open and
+                            'leave-open' not in values.get('keywords', {})):
+                            kwargs['status'] = 'RESOLVED'
+                            kwargs['resolution'] = 'FIXED'
                         if kwargs:
                             kwargs['comment'] = {'body': message}
                             self.bugzilla.update_bug(info.bug, **kwargs)
@@ -480,15 +494,31 @@ class TestPulseDispatcher(unittest.TestCase):
         class TestBugzilla(object):
             def __init__(self):
                 self.comments = defaultdict(list)
+                self.fields = defaultdict(dict)
+                self.data = defaultdict(dict)
 
             def get_comments(self, bug):
                 return self.comments.get(bug, [])
 
             def get_fields(self, bug, fields):
-                return {}
+                result = {}
+                for field in fields:
+                    data = self.fields.get(bug, {}).get(field)
+                    if data:
+                        result[field] = data
+                return result
 
             def post_comment(self, bug, message):
                 self.comments[bug].append(message)
+
+            def update_bug(self, bug, **kwargs):
+                # TODO: Handle keywords and whiteboard and add a test for the
+                # checkin-needed removal.
+                for k, v in kwargs.iteritems():
+                    if k == 'comment':
+                        self.post_comment(bug, v['body'])
+                    else:
+                        self.data[bug][k] = v
 
             def clear(self):
                 self.__init__()
@@ -509,10 +539,12 @@ class TestPulseDispatcher(unittest.TestCase):
                 self.shutting_down = True
                 self.bugzilla_thread.join()
 
-        def do_push(push):
+        def do_push(push, leave_open=False):
             dispatcher = TestPulseDispatcher()
             try:
                 for info in dispatcher.munge_for_bugzilla(push):
+                    if leave_open:
+                        info.leave_open = leave_open
                     dispatcher.bugzilla_queue.put(info)
             finally:
                 dispatcher.bugzilla_queue.put(None)
@@ -582,6 +614,23 @@ class TestPulseDispatcher(unittest.TestCase):
         do_push(push)
         self.assertEquals(bz.comments, comments)
 
+        # Bug status should be updated
+        bz.clear()
+        do_push(push)
+        self.assertEquals(bz.data, {42: {
+            'status': 'RESOLVED',
+            'resolution': 'FIXED',
+        }})
+
+        bz.clear()
+        do_push(push, leave_open=True)
+        self.assertEquals(bz.data, {})
+
+        bz.clear()
+        bz.fields[42] = {'keywords': {'leave-open'}}
+        do_push(push)
+        self.assertEquals(bz.data, {})
+
     def test_bugzilla_summary(self):
         def summary_equals(desc, summary):
             self.assertEquals(list(PulseDispatcher.bugzilla_summary({
@@ -636,7 +685,9 @@ class TestPulseDispatcher(unittest.TestCase):
         class TestPulseDispatcher(PulseDispatcher):
             def __init__(self, bugzilla_branches, dispatch, push):
                 self.max_checkins = 10
+                bugzilla_branches, bugzilla_leave_open = bugzilla_branches
                 self.bugzilla_branches = bugzilla_branches
+                self.bugzilla_leave_open = bugzilla_leave_open
                 self.dispatch = dispatch
                 self.hgpushes = [push]
                 self.irc = []
@@ -667,7 +718,7 @@ class TestPulseDispatcher(unittest.TestCase):
                 }],
             }
 
-        bugzilla_branches = ['repoa', 'repob']
+        bugzilla_branches = ['repoa', 'repob'], {}
         dispatch = DispatchConfig({
             'repob': {'#chan1', '#chan2'},
             'repoc': {'#chan2', '#chan3'},
@@ -681,6 +732,7 @@ class TestPulseDispatcher(unittest.TestCase):
         self.assertEquals(test.bugzilla, [{
             'bug': 42,
             'pusher': 'foo@bar.com',
+            'leave_open': False,
             'changesets': [{
                 'desc': 'Bug 42 - Changed something',
                 'is_backout': False,
@@ -700,6 +752,7 @@ class TestPulseDispatcher(unittest.TestCase):
         self.assertEquals(test.bugzilla, [{
             'bug': 42,
             'pusher': 'foo@bar.com',
+            'leave_open': False,
             'changesets': [{
                 'desc': 'Bug 42 - Changed something',
                 'is_backout': False,
@@ -795,12 +848,14 @@ class TestPulseDispatcher(unittest.TestCase):
 
         bugzilla_branches = DispatchConfig()
         bugzilla_branches.add('repo*')
+        bugzilla_branches = bugzilla_branches, {}
         dispatch = DispatchConfig()
         test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repo'))
         self.assertEquals(test.irc, [])
         self.assertEquals(test.bugzilla, [{
             'bug': 42,
             'pusher': 'foo@bar.com',
+            'leave_open': False,
             'changesets': [{
                 'desc': 'Bug 42 - Changed something',
                 'is_backout': False,
@@ -813,6 +868,75 @@ class TestPulseDispatcher(unittest.TestCase):
         self.assertEquals(test.bugzilla, [{
             'bug': 42,
             'pusher': 'foo@bar.com',
+            'leave_open': False,
+            'changesets': [{
+                'desc': 'Bug 42 - Changed something',
+                'is_backout': False,
+                'revlink': 'https://server/repoa/rev/1234567890ab',
+            }]
+        }])
+
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('foo'))
+        self.assertEquals(test.irc, [])
+        self.assertEquals(test.bugzilla, [])
+
+        bugzilla_branches = DispatchConfig()
+        bugzilla_branches.add('repo*')
+        bugzilla_branches = bugzilla_branches, {'repoa'}
+        dispatch = DispatchConfig()
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repo'))
+        self.assertEquals(test.irc, [])
+        self.assertEquals(test.bugzilla, [{
+            'bug': 42,
+            'pusher': 'foo@bar.com',
+            'leave_open': False,
+            'changesets': [{
+                'desc': 'Bug 42 - Changed something',
+                'is_backout': False,
+                'revlink': 'https://server/repo/rev/1234567890ab',
+            }]
+        }])
+
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repoa'))
+        self.assertEquals(test.irc, [])
+        self.assertEquals(test.bugzilla, [{
+            'bug': 42,
+            'pusher': 'foo@bar.com',
+            'leave_open': True,
+            'changesets': [{
+                'desc': 'Bug 42 - Changed something',
+                'is_backout': False,
+                'revlink': 'https://server/repoa/rev/1234567890ab',
+            }]
+        }])
+
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('foo'))
+        self.assertEquals(test.irc, [])
+        self.assertEquals(test.bugzilla, [])
+
+        bugzilla_branches = DispatchConfig()
+        bugzilla_branches.add('repo*')
+        bugzilla_branches = bugzilla_branches, bugzilla_branches
+        dispatch = DispatchConfig()
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repo'))
+        self.assertEquals(test.irc, [])
+        self.assertEquals(test.bugzilla, [{
+            'bug': 42,
+            'pusher': 'foo@bar.com',
+            'leave_open': True,
+            'changesets': [{
+                'desc': 'Bug 42 - Changed something',
+                'is_backout': False,
+                'revlink': 'https://server/repo/rev/1234567890ab',
+            }]
+        }])
+
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repoa'))
+        self.assertEquals(test.irc, [])
+        self.assertEquals(test.bugzilla, [{
+            'bug': 42,
+            'pusher': 'foo@bar.com',
+            'leave_open': True,
             'changesets': [{
                 'desc': 'Bug 42 - Changed something',
                 'is_backout': False,
