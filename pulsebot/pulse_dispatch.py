@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import fnmatch
 import logging
 import os
 import re
@@ -69,6 +70,24 @@ class BugInfo(object):
         return iter(self.changesets)
 
 
+class DispatchConfig(object):
+    def __init__(self, *args, **kwargs):
+        self._data = defaultdict(set, *args, **kwargs)
+
+    def get(self, key):
+        result = self._data.get(key, set())
+        for k, v in self._data.iteritems():
+            if k == '*' or ('*' in k and fnmatch.fnmatch(key, k)):
+                result |= v
+        return result
+
+    def __contains__(self, key):
+        return bool(self.get(key))
+
+    def add(self, key, value=None):
+        self._data[key].add(value)
+
+
 class PulseDispatcher(object):
     instance = None
 
@@ -76,8 +95,8 @@ class PulseDispatcher(object):
         self.msg = msg
         self.config = config
         self.hgpushes = PulseHgPushes(config)
-        self.dispatch = defaultdict(set)
-        self.bugzilla_branches = ()
+        self.dispatch = DispatchConfig()
+        self.bugzilla_branches = DispatchConfig()
         self.max_checkins = 10
         self.shutting_down = False
         self.backout_delay = 600
@@ -94,14 +113,15 @@ class PulseDispatcher(object):
                                      config.bugzilla.password)
 
             if config.parser.has_option('bugzilla', 'pulse'):
-                self.bugzilla_branches = config.bugzilla.get_list('pulse')
+                for branch in config.bugzilla.get_list('pulse'):
+                    self.bugzilla_branches.add(branch)
 
         if config.parser.has_option('pulse', 'channels'):
             for chan in config.pulse.get_list('channels'):
                 confchan = chan[1:] if chan[0] == '#' else chan
                 if config.parser.has_option('pulse', confchan):
                     for branch in config.pulse.get_list(confchan):
-                        self.dispatch[branch].add(chan)
+                        self.dispatch.add(branch, chan)
 
         if config.parser.has_option('pulse', 'max_checkins'):
             self.max_checkins = config.pulse.max_checkins
@@ -120,8 +140,7 @@ class PulseDispatcher(object):
             url = urlparse.urlparse(push['pushlog'])
             branch = os.path.dirname(url.path).strip('/')
 
-            channels = self.dispatch.get(branch, set())
-            channels |= self.dispatch.get('*', set())
+            channels = self.dispatch.get(branch)
 
             if channels:
                 for msg in self.create_messages(push, self.max_checkins):
@@ -595,13 +614,10 @@ class TestPulseDispatcher(unittest.TestCase):
 
     def test_dispatch(self):
         class TestPulseDispatcher(PulseDispatcher):
-            def __init__(self, push):
+            def __init__(self, bugzilla_branches, dispatch, push):
                 self.max_checkins = 10
-                self.bugzilla_branches = ('repoa', 'repob')
-                self.dispatch = {
-                    'repob': {'#chan1', '#chan2'},
-                    'repoc': {'#chan2', '#chan3'},
-                }
+                self.bugzilla_branches = bugzilla_branches
+                self.dispatch = dispatch
                 self.hgpushes = [push]
                 self.irc = []
                 self.bugzilla = []
@@ -631,11 +647,16 @@ class TestPulseDispatcher(unittest.TestCase):
                 }],
             }
 
-        test = TestPulseDispatcher(push('repo'))
+        bugzilla_branches = ['repoa', 'repob']
+        dispatch = DispatchConfig({
+            'repob': {'#chan1', '#chan2'},
+            'repoc': {'#chan2', '#chan3'},
+        })
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repo'))
         self.assertEquals(test.irc, [])
         self.assertEquals(test.bugzilla, [])
 
-        test = TestPulseDispatcher(push('repoa'))
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repoa'))
         self.assertEquals(test.irc, [])
         self.assertEquals(test.bugzilla, [{
             'bug': 42,
@@ -647,7 +668,7 @@ class TestPulseDispatcher(unittest.TestCase):
             }]
         }])
 
-        test = TestPulseDispatcher(push('repob'))
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repob'))
         self.assertEquals(sorted(test.irc), [
             ('#chan1', '#chan1',
              "Check-in: https://server/repob/rev/1234567890ab - "
@@ -666,7 +687,7 @@ class TestPulseDispatcher(unittest.TestCase):
             }]
         }])
 
-        test = TestPulseDispatcher(push('repoc'))
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repoc'))
         self.assertEquals(sorted(test.irc), [
             ('#chan2', '#chan2',
              "Check-in: https://server/repoc/rev/1234567890ab - "
@@ -675,4 +696,110 @@ class TestPulseDispatcher(unittest.TestCase):
              "Check-in: https://server/repoc/rev/1234567890ab - "
              "Ann O'nymous - Bug 42 - Changed something"),
         ])
+        self.assertEquals(test.bugzilla, [])
+
+        dispatch.add('repo*', '#chan4')
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('foo'))
+        self.assertEquals(sorted(test.irc), [])
+
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repo'))
+        self.assertEquals(sorted(test.irc), [
+            ('#chan4', '#chan4',
+             "Check-in: https://server/repo/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+        ])
+
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repob'))
+        self.assertEquals(sorted(test.irc), [
+            ('#chan1', '#chan1',
+             "Check-in: https://server/repob/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+            ('#chan2', '#chan2',
+             "Check-in: https://server/repob/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+            ('#chan4', '#chan4',
+             "Check-in: https://server/repob/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+        ])
+
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repod'))
+        self.assertEquals(sorted(test.irc), [
+            ('#chan4', '#chan4',
+             "Check-in: https://server/repod/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+        ])
+
+        dispatch.add('*', '#chan5')
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('foo'))
+        self.assertEquals(sorted(test.irc), [
+            ('#chan5', '#chan5',
+             "Check-in: https://server/foo/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+        ])
+
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repo'))
+        self.assertEquals(sorted(test.irc), [
+            ('#chan4', '#chan4',
+             "Check-in: https://server/repo/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+            ('#chan5', '#chan5',
+             "Check-in: https://server/repo/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+        ])
+
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repob'))
+        self.assertEquals(sorted(test.irc), [
+            ('#chan1', '#chan1',
+             "Check-in: https://server/repob/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+            ('#chan2', '#chan2',
+             "Check-in: https://server/repob/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+            ('#chan4', '#chan4',
+             "Check-in: https://server/repob/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+            ('#chan5', '#chan5',
+             "Check-in: https://server/repob/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+        ])
+
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repod'))
+        self.assertEquals(sorted(test.irc), [
+            ('#chan4', '#chan4',
+             "Check-in: https://server/repod/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+            ('#chan5', '#chan5',
+             "Check-in: https://server/repod/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+        ])
+
+        bugzilla_branches = DispatchConfig()
+        bugzilla_branches.add('repo*')
+        dispatch = DispatchConfig()
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repo'))
+        self.assertEquals(test.irc, [])
+        self.assertEquals(test.bugzilla, [{
+            'bug': 42,
+            'pusher': 'foo@bar.com',
+            'changesets': [{
+                'desc': 'Bug 42 - Changed something',
+                'is_backout': False,
+                'revlink': 'https://server/repo/rev/1234567890ab',
+            }]
+        }])
+
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('repoa'))
+        self.assertEquals(test.irc, [])
+        self.assertEquals(test.bugzilla, [{
+            'bug': 42,
+            'pusher': 'foo@bar.com',
+            'changesets': [{
+                'desc': 'Bug 42 - Changed something',
+                'is_backout': False,
+                'revlink': 'https://server/repoa/rev/1234567890ab',
+            }]
+        }])
+
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, push('foo'))
+        self.assertEquals(test.irc, [])
         self.assertEquals(test.bugzilla, [])
