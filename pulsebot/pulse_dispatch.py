@@ -478,24 +478,29 @@ class TestPulseDispatcher(unittest.TestCase):
         self.assertEquals(munge(push), result)
 
     def test_bugzilla_reporter(self):
-        comments = defaultdict(list)
-
         class TestBugzilla(object):
+            def __init__(self):
+                self.comments = defaultdict(list)
+
             def get_comments(self, bug):
-                return comments.get(bug, [])
+                return self.comments.get(bug, [])
 
             def get_fields(self, bug, fields):
                 return {}
 
             def post_comment(self, bug, message):
-                comments[bug].append(message)
+                self.comments[bug].append(message)
 
+            def clear(self):
+                self.__init__()
+
+        bz = TestBugzilla()
 
         class TestPulseDispatcher(PulseDispatcher):
             def __init__(self):
                 self.shutting_down = False
                 self.backout_delay = 0
-                self.bugzilla = TestBugzilla()
+                self.bugzilla = bz
                 self.bugzilla_queue = Queue(42)
                 self.bugzilla_thread = threading.Thread(
                     target=self.bugzilla_reporter)
@@ -519,25 +524,25 @@ class TestPulseDispatcher(unittest.TestCase):
             'user': 'foo@bar.com',
             'changesets': self.CHANGESETS[:1],
         }
-        result = {
+        comments = {
             42: ['Pushed by foo@bar.com:\n'
                  'https://server/repo/rev/1234567890ab\n'
                  'Changed something'],
         }
         do_push(push)
-        self.assertEquals(comments, result)
+        self.assertEquals(bz.comments, comments)
 
-        comments.clear()
+        bz.clear()
         push['changesets'].append(self.CHANGESETS[1])
-        result[42][0] += ('\n'
+        comments[42][0] += ('\n'
             'https://server/repo/rev/234567890abc\n'
             'Fixup for bug 42 - Changed something else')
         do_push(push)
-        self.assertEquals(comments, result)
+        self.assertEquals(bz.comments, comments)
 
-        comments.clear()
+        bz.clear()
         push['changesets'].extend(self.CHANGESETS[2:5])
-        result[43] = [
+        comments[43] = [
             'Pushed by foo@bar.com:\n'
             'https://server/repo/rev/34567890abcd\n'
             'Lorem ipsum\n'
@@ -547,20 +552,20 @@ class TestPulseDispatcher(unittest.TestCase):
             'consectetur adipiscing elit'
         ]
         do_push(push)
-        self.assertEquals(comments, result)
+        self.assertEquals(bz.comments, comments)
 
         push['changesets'].append({
             'author': 'Sheriff',
             'revlink': 'https://server/repo/rev/90abcdef0123',
             'desc': 'Backout bug 41 for bustage',
         })
-        result[41] = [
+        comments[41] = [
             'Backout by foo@bar.com:\n'
             'https://server/repo/rev/90abcdef0123\n'
             'Backout for bustage',
         ]
         do_push(push)
-        self.assertEquals(comments, result)
+        self.assertEquals(bz.comments, comments)
 
     def test_bugzilla_summary(self):
         def summary_equals(desc, summary):
