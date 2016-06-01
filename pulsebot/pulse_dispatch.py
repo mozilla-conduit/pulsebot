@@ -308,7 +308,6 @@ class PulseDispatcher(object):
                         else:
                             self.bugzilla.post_comment(info.bug, message)
                 except:
-                    raise
                     logging.getLogger('pulsebot.buzilla').error(
                         "Failed to send comment to bug %d", info.bug)
 
