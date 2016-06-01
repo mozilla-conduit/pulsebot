@@ -92,13 +92,13 @@ class TestPushesInfo(unittest.TestCase):
         # Not ideal: this relies on actual live data.
         results = [{
             'pushlog':
-                'https://hg.mozilla.org/integration//mozilla-inbound/'
+                'https://hg.mozilla.org/integration/mozilla-inbound/'
                 'pushloghtml?startID=5&endID=6',
             'user': 'eakhgari@mozilla.com',
             'changesets': [{
                 'author': 'Rafael Ávila de Espíndola',
                 'revlink':
-                    'https://hg.mozilla.org/integration//mozilla-inbound/'
+                    'https://hg.mozilla.org/integration/mozilla-inbound/'
                     'rev/685f5ae6e7de',
                 'desc':
                     'Bug 657653. Check for libstdc++ versions in '
@@ -106,13 +106,13 @@ class TestPushesInfo(unittest.TestCase):
             }],
         }, {
             'pushlog':
-                'https://hg.mozilla.org/integration//mozilla-inbound/'
+                'https://hg.mozilla.org/integration/mozilla-inbound/'
                 'pushloghtml?startID=6&endID=7',
             'user': 'rocallahan@mozilla.com',
             'changesets': [{
                 'author': "Robert O'Callahan",
                 'revlink':
-                    'https://hg.mozilla.org/integration//mozilla-inbound/'
+                    'https://hg.mozilla.org/integration/mozilla-inbound/'
                     'rev/63c8f645cc1c',
                 'desc':
                     'Bug 661471. Part 6.1: Expose '
@@ -120,7 +120,7 @@ class TestPushesInfo(unittest.TestCase):
             }, {
                 'author': "Robert O'Callahan",
                 'revlink':
-                    'https://hg.mozilla.org/integration//mozilla-inbound/'
+                    'https://hg.mozilla.org/integration/mozilla-inbound/'
                     'rev/3eb99af46b93',
                 'desc':
                     'Bug 661471. Part 6.2: Handle dynamic changes to '
@@ -128,7 +128,7 @@ class TestPushesInfo(unittest.TestCase):
             }, {
                 'author': 'Jonathan Kew',
                 'revlink':
-                    'https://hg.mozilla.org/integration//mozilla-inbound/'
+                    'https://hg.mozilla.org/integration/mozilla-inbound/'
                     'rev/1ccc676a3a2c',
                 'desc':
                     'Bug 661471. Part 6.3: Ensure that force_gdi_classic '
@@ -137,7 +137,7 @@ class TestPushesInfo(unittest.TestCase):
             }, {
                 'author': 'Jonathan Kew',
                 'revlink':
-                    'https://hg.mozilla.org/integration//mozilla-inbound/'
+                    'https://hg.mozilla.org/integration/mozilla-inbound/'
                     'rev/5607cca3f7bf',
                 'desc':
                     'Bug 661471. Part 7: Let gfxDWriteFonts know whether '
@@ -147,7 +147,7 @@ class TestPushesInfo(unittest.TestCase):
 
         message = {'payload': {
             'repo_url':
-                'https://hg.mozilla.org/integration//mozilla-inbound',
+                'https://hg.mozilla.org/integration/mozilla-inbound',
             'pushlog_pushes': [
                 {'push_full_json_url':
                     'https://hg.mozilla.org/integration/mozilla-inbound/'
@@ -162,7 +162,7 @@ class TestPushesInfo(unittest.TestCase):
 
         message = {'payload': {
             'repo_url':
-                'https://hg.mozilla.org/integration//mozilla-inbound',
+                'https://hg.mozilla.org/integration/mozilla-inbound',
             'pushlog_pushes': [
                 {'push_full_json_url':
                     'https://hg.mozilla.org/integration/mozilla-inbound/'
@@ -179,7 +179,7 @@ class TestPushesInfo(unittest.TestCase):
 
         message = {'payload': {
             'repo_url':
-                'https://hg.mozilla.org/integration//mozilla-inbound',
+                'https://hg.mozilla.org/integration/mozilla-inbound',
             'pushlog_pushes': [
                 {'push_full_json_url':
                     'https://hg.mozilla.org/integration/mozilla-inbound/'
