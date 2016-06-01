@@ -567,6 +567,22 @@ class TestPulseDispatcher(unittest.TestCase):
         do_push(push)
         self.assertEquals(bz.comments, comments)
 
+        bz.clear()
+        # If there is already a comment for the landed changeset, don't
+        # add one ourselves.
+        bz.post_comment(42, 'Landed: https://server/repo/rev/1234567890ab')
+        comments = {42: bz.get_comments(42)}
+        push['changesets'] = self.CHANGESETS[:1]
+        do_push(push)
+        self.assertEquals(bz.comments, comments)
+
+        push['changesets'].append(self.CHANGESETS[1])
+        comments[42].append(
+            'https://server/repo/rev/234567890abc\n'
+            'Fixup for bug 42 - Changed something else')
+        do_push(push)
+        self.assertEquals(bz.comments, comments)
+
     def test_bugzilla_summary(self):
         def summary_equals(desc, summary):
             self.assertEquals(list(PulseDispatcher.bugzilla_summary({
