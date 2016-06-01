@@ -77,6 +77,7 @@ class PulseDispatcher(object):
         self.config = config
         self.hgpushes = PulseHgPushes(config)
         self.dispatch = defaultdict(set)
+        self.bugzilla_branches = ()
         self.max_checkins = 10
         self.shutting_down = False
         self.backout_delay = 600
@@ -91,11 +92,9 @@ class PulseDispatcher(object):
             self.bugzilla = Bugzilla(server,
                                      config.bugzilla.user,
                                      config.bugzilla.password)
-        else:
-            self.bugzilla = None
 
-        if config.parser.has_option('bugzilla', 'pulse'):
-            self.bugzilla_branches = config.bugzilla.get_list('pulse')
+            if config.parser.has_option('bugzilla', 'pulse'):
+                self.bugzilla_branches = config.bugzilla.get_list('pulse')
 
         if config.parser.has_option('pulse', 'channels'):
             for chan in config.pulse.get_list('channels'):
@@ -107,11 +106,13 @@ class PulseDispatcher(object):
         if config.parser.has_option('pulse', 'max_checkins'):
             self.max_checkins = config.pulse.max_checkins
 
-        if self.dispatch:
-            self.bugzilla_queue = Queue(42)
+        if self.dispatch or self.bugzilla_branches:
             self.reporter_thread = threading.Thread(target=self.change_reporter)
-            self.bugzilla_thread = threading.Thread(target=self.bugzilla_reporter)
             self.reporter_thread.start()
+
+        if self.bugzilla_branches:
+            self.bugzilla_queue = Queue(42)
+            self.bugzilla_thread = threading.Thread(target=self.bugzilla_reporter)
             self.bugzilla_thread.start()
 
     def change_reporter(self):
@@ -119,12 +120,15 @@ class PulseDispatcher(object):
             url = urlparse.urlparse(push['pushlog'])
             branch = os.path.dirname(url.path).strip('/')
 
-            for msg in self.create_messages(push, self.max_checkins):
-                for chan in self.dispatch.get(branch, set()) | \
-                        self.dispatch.get('*', set()):
-                    self.msg(chan, chan, "Check-in: %s" % msg)
+            channels = self.dispatch.get(branch, set())
+            channels |= self.dispatch.get('*', set())
 
-            if self.bugzilla and branch in self.bugzilla_branches:
+            if channels:
+                for msg in self.create_messages(push, self.max_checkins):
+                    for chan in channels:
+                        self.msg(chan, chan, "Check-in: %s" % msg)
+
+            if branch in self.bugzilla_branches:
                 for info in self.munge_for_bugzilla(push):
                     self.bugzilla_queue.put(info)
 
@@ -291,9 +295,11 @@ class PulseDispatcher(object):
 
     def shutdown(self):
         self.hgpushes.shutdown()
-        self.reporter_thread.join()
+        if self.dispatch or self.bugzilla_branches:
+            self.reporter_thread.join()
         self.shutting_down = True
-        self.bugzilla_thread.join()
+        if self.bugzilla_branches:
+            self.bugzilla_thread.join()
 
 
 class TestPulseDispatcher(unittest.TestCase):
@@ -586,3 +592,87 @@ class TestPulseDispatcher(unittest.TestCase):
             'Backed out changeset 234567890abc (bug 41) for bustage',
             'Backed out changeset 234567890abc for bustage',
         )
+
+    def test_dispatch(self):
+        class TestPulseDispatcher(PulseDispatcher):
+            def __init__(self, push):
+                self.max_checkins = 10
+                self.bugzilla_branches = ('repoa', 'repob')
+                self.dispatch = {
+                    'repob': {'#chan1', '#chan2'},
+                    'repoc': {'#chan2', '#chan3'},
+                }
+                self.hgpushes = [push]
+                self.irc = []
+                self.bugzilla = []
+                self.change_reporter()
+
+            def msg(self, *args):
+                self.irc.append(args)
+
+            @property
+            def bugzilla_queue(self):
+                class FakeQueue(object):
+                    @staticmethod
+                    def put(info):
+                        self.bugzilla.append(info.__dict__)
+
+                return FakeQueue()
+
+        def push(repo):
+            return {
+                'pushlog': 'https://server/%s/pushloghtml?startID=1&endID=2'
+                % repo,
+                'user': 'foo@bar.com',
+                'changesets': [{
+                    'author': "Ann O'nymous",
+                    'revlink': 'https://server/%s/rev/1234567890ab' % repo,
+                    'desc': 'Bug 42 - Changed something',
+                }],
+            }
+
+        test = TestPulseDispatcher(push('repo'))
+        self.assertEquals(test.irc, [])
+        self.assertEquals(test.bugzilla, [])
+
+        test = TestPulseDispatcher(push('repoa'))
+        self.assertEquals(test.irc, [])
+        self.assertEquals(test.bugzilla, [{
+            'bug': 42,
+            'pusher': 'foo@bar.com',
+            'changesets': [{
+                'desc': 'Bug 42 - Changed something',
+                'is_backout': False,
+                'revlink': 'https://server/repoa/rev/1234567890ab',
+            }]
+        }])
+
+        test = TestPulseDispatcher(push('repob'))
+        self.assertEquals(sorted(test.irc), [
+            ('#chan1', '#chan1',
+             "Check-in: https://server/repob/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+            ('#chan2', '#chan2',
+             "Check-in: https://server/repob/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+        ])
+        self.assertEquals(test.bugzilla, [{
+            'bug': 42,
+            'pusher': 'foo@bar.com',
+            'changesets': [{
+                'desc': 'Bug 42 - Changed something',
+                'is_backout': False,
+                'revlink': 'https://server/repob/rev/1234567890ab',
+            }]
+        }])
+
+        test = TestPulseDispatcher(push('repoc'))
+        self.assertEquals(sorted(test.irc), [
+            ('#chan2', '#chan2',
+             "Check-in: https://server/repoc/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+            ('#chan3', '#chan3',
+             "Check-in: https://server/repoc/rev/1234567890ab - "
+             "Ann O'nymous - Bug 42 - Changed something"),
+        ])
+        self.assertEquals(test.bugzilla, [])
