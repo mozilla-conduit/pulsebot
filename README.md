@@ -51,7 +51,7 @@ server = https://api.pub.build.mozilla.org/treestatus/trees
 server = https://bugzilla.mozilla.org/
 user = bugzilla-user-for-pulsebot
 password = bugzilla-password-for-pulsebot
-pulse = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,mozilla-central,hgcustom/version-control-tools
+pulse = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,mozilla-central,hgcustom/version-control-tools,mozilla-build
 leave_open = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,mozilla-central
 ```
 
