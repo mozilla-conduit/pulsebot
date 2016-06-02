@@ -6,11 +6,9 @@ Pulsebot is a bot listening to pulse.mozilla.org for mercurial changes and notif
 The current setup used on irc.mozilla.org can be replicated as follows:
 
 ```
-sudo apt-get install python-virtualenv git
+sudo apt-get install python-virtualenv
 virtualenv bot
-git clone https://github.com/sopel-irc/sopel
-(cd sopel; ../bot/bin/python setup.py install)
-bot/bin/pip install MozillaPulse
+bot/bin/pip install -r requirements.txt
 ```
 
 Then create a ```pulsebot.cfg``` configuration in the directory you will start it from. The current configuration for the bot is:
