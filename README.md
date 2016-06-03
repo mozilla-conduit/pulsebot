@@ -13,49 +13,24 @@ virtualenv bot
 bot/bin/pip install -r requirements.txt
 ```
 
-Then create a ```pulsebot.cfg``` configuration in the directory you will start it from. The current configuration for the bot is:
+Then create a `pulsebot.cfg` configuration:
 
 ```
-[core]
-nick = pulsebot
-host = irc.mozilla.org
-use_ssl = True
-port = 6697
-owner = glandium
-channels = #pulsebot,#bugs,#developers,#tb-bugs,#mozreview,#vcs
-user = pulsebot
-name = pulsebot
-prefix =
-admins =
-verify_ssl = True
-timeout = 120
-
-[pulse]
-channels = #pulsebot,#bugs,#developers,#tb-bugs,#mozreview,#vcs
-user = pulsebot
-password = pulse-password-for-pulsebot
-
-pulsebot = *
-bugs = projects/alder,integration/b2g-inbound,releases/comm-aurora,releases/comm-beta,comm-central,integration/fx-team,releases/mozilla-aurora,releases/mozilla-beta,mozilla-central,releases/mozilla-esr*,integration/mozilla-inbound
-developers = integration/b2g-inbound,integration/fx-team,releases/mozilla-aurora,releases/mozilla-beta,mozilla-central,releases/mozilla-esr*,integration/mozilla-inbound
-fx-team = integration/fx-team
-media = projects/alder
-tb-bugs = releases/comm-aurora,releases/comm-beta,comm-central
-mozreview = hgcustom/version-control-tools
-vcs = hgcustom/version-control-tools
-
-[treestatus]
-server = https://api.pub.build.mozilla.org/treestatus/trees
-
-[bugzilla]
-server = https://bugzilla.mozilla.org/
-user = bugzilla-user-for-pulsebot
-password = bugzilla-password-for-pulsebot
-pulse = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,mozilla-central,hgcustom/version-control-tools,mozilla-build
-leave_open = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,mozilla-central
+bot/bin/python -m pulsebot.config > pulsebot.cfg
 ```
 
-The bot can then be started by
+If you already have a `pulsebot.cfg` file, you shall update it with the new
+default configuration:
+
+```
+bot/bin/python -m pulsebot.config > pulsebot.cfg.new
+# Check the differences
+diff -u pulsebot.cfg pulsebot.cfg.new
+mv pulsebot.cfg.new pulsebot.cfg
+```
+
+The bot can then be started with:
+
 ```
 bot/bin/python -m pulsebot
 ```
