@@ -143,21 +143,24 @@ class PulseDispatcher(object):
 
     def change_reporter(self):
         for push in self.hgpushes:
-            url = urlparse.urlparse(push['pushlog'])
-            branch = os.path.dirname(url.path).strip('/')
+            self.report_one_push(push)
 
-            channels = self.dispatch.get(branch)
+    def report_one_push(self, push):
+        url = urlparse.urlparse(push['pushlog'])
+        branch = os.path.dirname(url.path).strip('/')
 
-            if channels:
-                for msg in self.create_messages(push, self.max_checkins):
-                    for chan in channels:
-                        self.msg(chan, chan, "Check-in: %s" % msg)
+        channels = self.dispatch.get(branch)
 
-            if branch in self.bugzilla_branches:
-                for info in self.munge_for_bugzilla(push):
-                    if branch in self.bugzilla_leave_open:
-                        info.leave_open = True
-                    self.bugzilla_queue.put(info)
+        if channels:
+            for msg in self.create_messages(push, self.max_checkins):
+                for chan in channels:
+                    self.msg(chan, chan, "Check-in: %s" % msg)
+
+        if branch in self.bugzilla_branches:
+            for info in self.munge_for_bugzilla(push):
+                if branch in self.bugzilla_leave_open:
+                    info.leave_open = True
+                self.bugzilla_queue.put(info)
 
     @staticmethod
     def create_messages(push, max_checkins=sys.maxsize, max_bugs=5):

@@ -61,6 +61,10 @@ class Bot(object):
         logger.addHandler(logging.StreamHandler(
             MsgWriter(self, config.core.owner)))
 
+    @property
+    def owner(self):
+        return self._sopel.config.core.owner
+
     def _run(self):
         self._sopel.run(self._sopel.config.core.host,
                          int(self._sopel.config.core.port))

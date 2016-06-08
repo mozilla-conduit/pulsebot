@@ -43,6 +43,14 @@ for command, where, nick in bot:
                 )
             except UnknownBranch:
                 bot.msg(where, nick, 'Unknown branch: %s' % branch)
+    elif verb == 'retry':
+        # This isn't very secure, but then the action is presumably not very
+        # sensitive.
+        if where == nick == bot.owner:
+            url = args[0]
+            for push in dispatcher.hgpushes.get_push_info_from(url):
+                dispatcher.report_one_push(push)
+
 
 dispatcher.shutdown()
 bot.shutdown()
