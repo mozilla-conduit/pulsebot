@@ -86,7 +86,7 @@ class PulseDispatcher(object):
         if (config.parser.has_option('bugzilla', 'server')
                 and config.parser.has_option('bugzilla', 'password')
                 and config.parser.has_option('bugzilla', 'user')):
-            self.bugzilla = Bugzilla(server,
+            self.bugzilla = Bugzilla(config.bugzilla.server,
                                      config.bugzilla.user,
                                      config.bugzilla.password)
 
