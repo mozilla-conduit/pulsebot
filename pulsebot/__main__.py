@@ -13,14 +13,6 @@ import os
 
 
 config = Config('pulsebot.cfg')
-if not config.parser.has_option('core', 'enable'):
-    config.core.enable = ['']
-
-if not config.parser.has_option('pulse', 'user'):
-    raise Exception('Missing configuration: pulse.user')
-
-if not config.parser.has_option('pulse', 'password'):
-    raise Exception('Missing configuration: pulse.password')
 
 treestatus = TreeStatus(config.treestatus.server)
 

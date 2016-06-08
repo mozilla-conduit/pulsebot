@@ -32,6 +32,15 @@ class Config(SopelConfig):
         self.bugzilla_branches = DispatchConfig()
         self.bugzilla_leave_open = DispatchConfig()
 
+        if not self.parser.has_option('core', 'enable'):
+            self.core.enable = ['']
+
+        if not self.parser.has_option('pulse', 'user'):
+            raise Exception('Missing configuration: pulse.user')
+
+        if not self.parser.has_option('pulse', 'password'):
+            raise Exception('Missing configuration: pulse.password')
+
         if (self.parser.has_option('bugzilla', 'server')
                 and self.parser.has_option('bugzilla', 'password')
                 and self.parser.has_option('bugzilla', 'user')):
