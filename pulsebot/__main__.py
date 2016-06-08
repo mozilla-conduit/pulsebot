@@ -42,6 +42,30 @@ for command, where, nick in bot:
             url = args[0]
             for push in dispatcher.hgpushes.get_push_info_from(url):
                 dispatcher.report_one_push(push)
+    elif verb == 'reload':
+        if where == nick == bot.owner:
+            new_config = Config('pulsebot.cfg')
+            use_new = False
+            if new_config.treestatus.server != config.treestatus.server:
+                treestatus = TreeStatus(new_config.treestatus.server)
+                use_new = True
+
+            if (any(getattr(new_config, k) != getattr(config, k)
+                    for k in ('dispatch', 'bugzilla_branches',
+                              'bugzilla_leave_open'))):
+                dispatcher.config = new_config
+                use_new = True
+
+            if new_config.core.channels != config.core.channels:
+                channels = set(config.core.channels)
+                new_channels = set(new_config.core.channels)
+                for c in new_channels - channels:
+                    bot.join(c)
+                for c in channels - new_channels:
+                    bot.part(c)
+
+            if use_new:
+                config = new_config
 
 
 dispatcher.shutdown()

@@ -77,6 +77,12 @@ class Bot(object):
             except KeyboardInterrupt:
                 break
 
+    def join(self, channel):
+        self._sopel.join(channel)
+
+    def part(self, channel):
+        self._sopel.part(channel)
+
     def msg(self, where, nick, message, max_messages=1):
         if nick and where != nick:
             message = '%s: %s' % (nick, message)
