@@ -2,7 +2,9 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import fnmatch
 from sopel.config import Config as SopelConfig
+from collections import defaultdict
 
 
 class DispatchConfig(object):
