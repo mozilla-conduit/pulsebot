@@ -2,7 +2,55 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from sopel.config import Config
+from sopel.config import Config as SopelConfig
+
+
+class DispatchConfig(object):
+    def __init__(self, *args, **kwargs):
+        self._data = defaultdict(set, *args, **kwargs)
+
+    def get(self, key):
+        result = self._data.get(key, set())
+        for k, v in self._data.iteritems():
+            if k == '*' or ('*' in k and fnmatch.fnmatch(key, k)):
+                result |= v
+        return result
+
+    def __contains__(self, key):
+        return bool(self.get(key))
+
+    def add(self, key, value=None):
+        self._data[key].add(value)
+
+
+class Config(SopelConfig):
+    def __init__(self, *args, **kwargs):
+        super(Config, self).__init__(*args, **kwargs)
+        self.dispatch = DispatchConfig()
+        self.bugzilla_branches = DispatchConfig()
+        self.bugzilla_leave_open = DispatchConfig()
+
+        if (self.parser.has_option('bugzilla', 'server')
+                and self.parser.has_option('bugzilla', 'password')
+                and self.parser.has_option('bugzilla', 'user')):
+            server = self.bugzilla.server
+            if not server.lower().startswith('https://'):
+                raise Exception('bugzilla.server must be a HTTPS url')
+
+            if self.parser.has_option('bugzilla', 'pulse'):
+                for branch in self.bugzilla.get_list('pulse'):
+                    self.bugzilla_branches.add(branch)
+
+            if self.parser.has_option('bugzilla', 'leave_open'):
+                for branch in self.bugzilla.get_list('leave_open'):
+                    self.bugzilla_leave_open.add(branch)
+
+        if self.parser.has_option('pulse', 'channels'):
+            for chan in self.pulse.get_list('channels'):
+                confchan = chan[1:] if chan[0] == '#' else chan
+                if self.parser.has_option('pulse', confchan):
+                    for branch in self.pulse.get_list(confchan):
+                        self.dispatch.add(branch, chan)
 
 
 if __name__ == '__main__':

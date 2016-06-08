@@ -96,9 +96,6 @@ class PulseDispatcher(object):
         self.msg = msg
         self.config = config
         self.hgpushes = PulseHgPushes(config)
-        self.dispatch = DispatchConfig()
-        self.bugzilla_branches = DispatchConfig()
-        self.bugzilla_leave_open = DispatchConfig()
         self.max_checkins = 10
         self.shutting_down = False
         self.backout_delay = 600
@@ -106,37 +103,18 @@ class PulseDispatcher(object):
         if (config.parser.has_option('bugzilla', 'server')
                 and config.parser.has_option('bugzilla', 'password')
                 and config.parser.has_option('bugzilla', 'user')):
-            server = config.bugzilla.server
-            if not server.lower().startswith('https://'):
-                raise Exception('bugzilla.server must be a HTTPS url')
-
             self.bugzilla = Bugzilla(server,
                                      config.bugzilla.user,
                                      config.bugzilla.password)
 
-            if config.parser.has_option('bugzilla', 'pulse'):
-                for branch in config.bugzilla.get_list('pulse'):
-                    self.bugzilla_branches.add(branch)
-
-            if config.parser.has_option('bugzilla', 'leave_open'):
-                for branch in config.bugzilla.get_list('leave_open'):
-                    self.bugzilla_leave_open.add(branch)
-
-        if config.parser.has_option('pulse', 'channels'):
-            for chan in config.pulse.get_list('channels'):
-                confchan = chan[1:] if chan[0] == '#' else chan
-                if config.parser.has_option('pulse', confchan):
-                    for branch in config.pulse.get_list(confchan):
-                        self.dispatch.add(branch, chan)
-
         if config.parser.has_option('pulse', 'max_checkins'):
             self.max_checkins = config.pulse.max_checkins
 
-        if self.dispatch or self.bugzilla_branches:
+        if self.config.dispatch or self.config.bugzilla_branches:
             self.reporter_thread = threading.Thread(target=self.change_reporter)
             self.reporter_thread.start()
 
-        if self.bugzilla_branches:
+        if self.config.bugzilla_branches:
             self.bugzilla_queue = Queue(42)
             self.bugzilla_thread = threading.Thread(target=self.bugzilla_reporter)
             self.bugzilla_thread.start()
@@ -149,16 +127,16 @@ class PulseDispatcher(object):
         url = urlparse.urlparse(push['pushlog'])
         branch = os.path.dirname(url.path).strip('/')
 
-        channels = self.dispatch.get(branch)
+        channels = self.config.dispatch.get(branch)
 
         if channels:
             for msg in self.create_messages(push, self.max_checkins):
                 for chan in channels:
                     self.msg(chan, chan, "Check-in: %s" % msg)
 
-        if branch in self.bugzilla_branches:
+        if branch in self.config.bugzilla_branches:
             for info in self.munge_for_bugzilla(push):
-                if branch in self.bugzilla_leave_open:
+                if branch in self.config.bugzilla_leave_open:
                     info.leave_open = True
                 self.bugzilla_queue.put(info)
 
@@ -330,10 +308,10 @@ class PulseDispatcher(object):
 
     def shutdown(self):
         self.hgpushes.shutdown()
-        if self.dispatch or self.bugzilla_branches:
+        if self.config.dispatch or self.config.bugzilla_branches:
             self.reporter_thread.join()
         self.shutting_down = True
-        if self.bugzilla_branches:
+        if self.config.bugzilla_branches:
             self.bugzilla_thread.join()
 
 
@@ -685,13 +663,16 @@ class TestPulseDispatcher(unittest.TestCase):
         )
 
     def test_dispatch(self):
+        class Dummy(object): pass
+
         class TestPulseDispatcher(PulseDispatcher):
             def __init__(self, bugzilla_branches, dispatch, push):
                 self.max_checkins = 10
                 bugzilla_branches, bugzilla_leave_open = bugzilla_branches
-                self.bugzilla_branches = bugzilla_branches
-                self.bugzilla_leave_open = bugzilla_leave_open
-                self.dispatch = dispatch
+                self.config = Dummy()
+                self.config.bugzilla_branches = bugzilla_branches
+                self.config.bugzilla_leave_open = bugzilla_leave_open
+                self.config.dispatch = dispatch
                 self.hgpushes = [push]
                 self.irc = []
                 self.bugzilla = []
