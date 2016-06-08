@@ -34,9 +34,8 @@ class PulseHgPushes(PulseListener):
         # Sanity checks
         try:
             payload = pulse_message.get('payload', {})
-            repo = payload.get('repo_url')
             pushes = payload.get('pushlog_pushes')
-            if not (repo and pushes):
+            if not pushes:
                 return
         except Exception:
             return
@@ -47,37 +46,8 @@ class PulseHgPushes(PulseListener):
                 continue
 
             try:
-                r = requests.get(push_url)
-                if r.status_code == 500:
-                    # If we got an error 500, try again once.
-                    r = requests.get(push_url)
-                if r.status_code != 200:
-                    r.raise_for_status()
-
-                data = r.json(object_pairs_hook=OrderedDict)
-
-                for id, d in data.get('pushes', {}).iteritems():
-                    id = int(id)
-                    push_data = {
-                        'pushlog': '%s/pushloghtml?startID=%d&endID=%d'
-                        % (repo, id - 1, id),
-                        'user': d.get('user'),
-                        'changesets': [],
-                    }
-
-                    for cs in d.get('changesets', ()):
-                        short_node = cs['node'][:12]
-                        revlink = '%s/rev/%s' \
-                            % (repo, short_node)
-
-                        push_data['changesets'].append({
-                            'revlink': revlink,
-                            'desc': cs['desc'].splitlines()[0].strip(),
-                            'author': cs['author'].split(' <')[0].strip(),
-                        })
-
-                    yield push_data
-
+                for data in PulseHgPushes.get_push_info_from(push_url):
+                    yield data
             except:
                 logger = logging.getLogger('pulsebot.hgpushes')
                 logger.error("Failure on %s", push_url)
@@ -86,6 +56,39 @@ class PulseHgPushes(PulseListener):
                 logger.debug("Message data was: %r", pulse_message)
                 continue
 
+    @staticmethod
+    def get_push_info_from(push_url):
+        repo = push_url[:push_url.rindex('/')]
+        r = requests.get(push_url)
+        if r.status_code == 500:
+            # If we got an error 500, try again once.
+            r = requests.get(push_url)
+        if r.status_code != 200:
+            r.raise_for_status()
+
+        data = r.json(object_pairs_hook=OrderedDict)
+
+        for id, d in data.get('pushes', {}).iteritems():
+            id = int(id)
+            push_data = {
+                'pushlog': '%s/pushloghtml?startID=%d&endID=%d'
+                % (repo, id - 1, id),
+                'user': d.get('user'),
+                'changesets': [],
+            }
+
+            for cs in d.get('changesets', ()):
+                short_node = cs['node'][:12]
+                revlink = '%s/rev/%s' \
+                    % (repo, short_node)
+
+                push_data['changesets'].append({
+                    'revlink': revlink,
+                    'desc': cs['desc'].splitlines()[0].strip(),
+                    'author': cs['author'].split(' <')[0].strip(),
+                })
+
+            yield push_data
 
 class TestPushesInfo(unittest.TestCase):
     def test_pushes_info(self):
