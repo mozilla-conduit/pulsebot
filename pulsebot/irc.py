@@ -2,7 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from config import Config
 from sopel import bot
 from Queue import (
     Empty,
@@ -10,7 +9,6 @@ from Queue import (
 )
 import logging
 import threading
-import os
 
 
 class Sopel(bot.Sopel):
@@ -67,7 +65,7 @@ class Bot(object):
 
     def _run(self):
         self._sopel.run(self._sopel.config.core.host,
-                         int(self._sopel.config.core.port))
+                        int(self._sopel.config.core.port))
         self._sopel = None
 
     def __iter__(self):

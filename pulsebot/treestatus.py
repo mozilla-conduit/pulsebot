@@ -2,7 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import json
 import requests
 
 
@@ -33,7 +32,7 @@ class TreeStatus(object):
             return True
 
         possible_branches = set(b for b in self._branches
-            if possible_match(b, branch))
+                                if possible_match(b, branch))
 
         if len(possible_branches) == 1:
             return possible_branches.pop()

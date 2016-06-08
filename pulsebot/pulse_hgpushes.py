@@ -90,6 +90,7 @@ class PulseHgPushes(PulseListener):
 
             yield push_data
 
+
 class TestPushesInfo(unittest.TestCase):
     def test_pushes_info(self):
         # Not ideal: this relies on actual live data.

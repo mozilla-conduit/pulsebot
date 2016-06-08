@@ -2,20 +2,16 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import fnmatch
 import logging
 import os
 import re
-import requests
 import sys
 import threading
 import time
-import traceback
 import urlparse
 import unittest
 from collections import (
     defaultdict,
-    OrderedDict,
 )
 from Queue import Queue, Empty
 from pulsebot.bugzilla import (
@@ -83,9 +79,9 @@ class PulseDispatcher(object):
         self.shutting_down = False
         self.backout_delay = 600
 
-        if (config.parser.has_option('bugzilla', 'server')
-                and config.parser.has_option('bugzilla', 'password')
-                and config.parser.has_option('bugzilla', 'user')):
+        if (config.parser.has_option('bugzilla', 'server') and
+                config.parser.has_option('bugzilla', 'password') and
+                config.parser.has_option('bugzilla', 'user')):
             self.bugzilla = Bugzilla(config.bugzilla.server,
                                      config.bugzilla.user,
                                      config.bugzilla.password)
@@ -94,12 +90,14 @@ class PulseDispatcher(object):
             self.max_checkins = config.pulse.max_checkins
 
         if self.config.dispatch or self.config.bugzilla_branches:
-            self.reporter_thread = threading.Thread(target=self.change_reporter)
+            self.reporter_thread = threading.Thread(
+                target=self.change_reporter)
             self.reporter_thread.start()
 
         if self.config.bugzilla_branches:
             self.bugzilla_queue = Queue(42)
-            self.bugzilla_thread = threading.Thread(target=self.bugzilla_reporter)
+            self.bugzilla_thread = threading.Thread(
+                target=self.bugzilla_reporter)
             self.bugzilla_thread.start()
 
     def change_reporter(self):
@@ -205,6 +203,7 @@ class PulseDispatcher(object):
 
     def bugzilla_reporter(self):
         delayed_comments = []
+
         def get_one():
             if delayed_comments:
                 when, info = delayed_comments[0]
@@ -243,6 +242,7 @@ class PulseDispatcher(object):
 
             if cs_to_write:
                 is_backout = all(cs['is_backout'] for cs in cs_to_write)
+
                 def comment():
                     if is_backout:
                         if info.pusher:
@@ -261,9 +261,9 @@ class PulseDispatcher(object):
                     # Delay comments for backouts and checkin-needed in
                     # whiteboard
                     delay_comment = (
-                        not delayed
-                        and (is_backout
-                             or 'checkin-needed' in values.get('whiteboard', ''))
+                        not delayed and
+                        (is_backout or
+                         'checkin-needed' in values.get('whiteboard', ''))
                     )
                     if delay_comment:
                         delayed_comments.append(
@@ -276,8 +276,8 @@ class PulseDispatcher(object):
                                 'remove': ['checkin-needed']
                             }
                         # TODO: reopen closed bugs on backout
-                        if (not is_backout and not info.leave_open and
-                            'leave-open' not in values.get('keywords', {})):
+                        if ('leave-open' not in values.get('keywords', {}) and
+                                not is_backout and not info.leave_open):
                             kwargs['status'] = 'RESOLVED'
                             kwargs['resolution'] = 'FIXED'
                         if kwargs:
@@ -362,7 +362,8 @@ class TestPulseDispatcher(unittest.TestCase):
         ))
         self.assertEquals(list(PulseDispatcher.create_messages(push)), result)
 
-        self.assertEquals(list(PulseDispatcher.create_messages(push, 5)), result)
+        self.assertEquals(list(PulseDispatcher.create_messages(push, 5)),
+                          result)
 
         push['changesets'].append(self.CHANGESETS[5])
         self.assertEquals(list(PulseDispatcher.create_messages(push, 5)), [
@@ -529,7 +530,8 @@ class TestPulseDispatcher(unittest.TestCase):
 
         bz.clear()
         push['changesets'].append(self.CHANGESETS[1])
-        comments[42][0] += ('\n'
+        comments[42][0] += (
+            '\n'
             'https://server/repo/rev/234567890abc\n'
             'Fixup for bug 42 - Changed something else')
         do_push(push)
@@ -646,7 +648,8 @@ class TestPulseDispatcher(unittest.TestCase):
         )
 
     def test_dispatch(self):
-        class Dummy(object): pass
+        class Dummy(object):
+            pass
 
         class TestPulseDispatcher(PulseDispatcher):
             def __init__(self, bugzilla_branches, dispatch, push):
