@@ -59,7 +59,7 @@ class Config(SopelConfig):
         if self.parser.has_section('channels'):
             for chan, _ in self.parser.items('channels'):
                 for branch in self.channels.get_list(chan):
-                    self.dispatch.add(branch, chan)
+                    self.dispatch.add(branch, '#' + chan)
 
 
 if __name__ == '__main__':
