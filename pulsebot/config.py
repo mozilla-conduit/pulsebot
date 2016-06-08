@@ -56,12 +56,10 @@ class Config(SopelConfig):
                 for branch in self.bugzilla.get_list('leave_open'):
                     self.bugzilla_leave_open.add(branch)
 
-        if self.parser.has_option('pulse', 'channels'):
-            for chan in self.pulse.get_list('channels'):
-                confchan = chan[1:] if chan[0] == '#' else chan
-                if self.parser.has_option('pulse', confchan):
-                    for branch in self.pulse.get_list(confchan):
-                        self.dispatch.add(branch, chan)
+        if self.parser.has_section('channels'):
+            for chan, _ in self.parser.items('channels'):
+                for branch in self.channels.get_list(chan):
+                    self.dispatch.add(branch, chan)
 
 
 if __name__ == '__main__':

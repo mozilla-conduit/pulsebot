@@ -13,11 +13,11 @@ verify_ssl = True
 timeout = 120
 
 [pulse]
-channels = #pulsebot,#bugs,#developers,#tb-bugs,#mozreview,#vcs
 applabel = @pulse.applabel@
 user = @pulse.user@
 password = @pulse.password@
 
+[channels]
 pulsebot = *
 bugs = projects/alder,integration/b2g-inbound,releases/comm-aurora,releases/comm-beta,comm-central,integration/fx-team,releases/mozilla-aurora,releases/mozilla-beta,mozilla-central,releases/mozilla-esr*,integration/mozilla-inbound
 developers = integration/b2g-inbound,integration/fx-team,releases/mozilla-aurora,releases/mozilla-beta,mozilla-central,releases/mozilla-esr*,integration/mozilla-inbound
