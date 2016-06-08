@@ -23,6 +23,7 @@ from pulsebot.bugzilla import (
     BugzillaError,
 )
 from pulsebot.pulse_hgpushes import PulseHgPushes
+from pulsebot.config import DispatchConfig
 
 REVLINK_RE = re.compile('/rev/[^/]*$')
 
@@ -69,24 +70,6 @@ class BugInfo(object):
 
     def __iter__(self):
         return iter(self.changesets)
-
-
-class DispatchConfig(object):
-    def __init__(self, *args, **kwargs):
-        self._data = defaultdict(set, *args, **kwargs)
-
-    def get(self, key):
-        result = self._data.get(key, set())
-        for k, v in self._data.iteritems():
-            if k == '*' or ('*' in k and fnmatch.fnmatch(key, k)):
-                result |= v
-        return result
-
-    def __contains__(self, key):
-        return bool(self.get(key))
-
-    def add(self, key, value=None):
-        self._data[key].add(value)
 
 
 class PulseDispatcher(object):
