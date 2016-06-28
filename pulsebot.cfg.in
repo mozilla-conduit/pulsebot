@@ -19,8 +19,8 @@ password = @pulse.password@
 
 [channels]
 pulsebot = *
-bugs = projects/alder,integration/b2g-inbound,releases/comm-aurora,releases/comm-beta,comm-central,integration/fx-team,releases/mozilla-aurora,releases/mozilla-beta,mozilla-central,releases/mozilla-esr*,integration/mozilla-inbound
-developers = integration/b2g-inbound,integration/fx-team,releases/mozilla-aurora,releases/mozilla-beta,mozilla-central,releases/mozilla-esr*,integration/mozilla-inbound
+bugs = projects/alder,integration/b2g-inbound,releases/comm-aurora,releases/comm-beta,comm-central,integration/fx-team,releases/mozilla-aurora,releases/mozilla-beta,mozilla-central,releases/mozilla-esr*,integration/mozilla-inbound,integration/autoland
+developers = integration/b2g-inbound,integration/fx-team,releases/mozilla-aurora,releases/mozilla-beta,mozilla-central,releases/mozilla-esr*,integration/mozilla-inbound,integration/autoland
 tb-bugs = releases/comm-aurora,releases/comm-beta,comm-central
 mozreview = hgcustom/version-control-tools
 vcs = hgcustom/version-control-tools
@@ -32,5 +32,5 @@ server = https://api.pub.build.mozilla.org/treestatus/trees
 server = https://bugzilla.mozilla.org/
 user = @bugzilla.user@
 password = @bugzilla.password@
-pulse = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,mozilla-central,hgcustom/version-control-tools,mozilla-build
-leave_open = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,mozilla-central
+pulse = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,integration/autoland,mozilla-central,hgcustom/version-control-tools,mozilla-build
+leave_open = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,integration/autoland,mozilla-central
