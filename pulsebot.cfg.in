@@ -4,7 +4,7 @@ host = irc.mozilla.org
 use_ssl = True
 port = 6697
 owner = @core.owner@
-channels = #pulsebot,#bugs,#developers,#tb-bugs,#mozreview,#vcs
+channels = #pulsebot,#bugs,#developers,#tb-bugs,#mozreview,#vcs,#gfx
 user = pulsebot
 name = pulsebot
 prefix =
@@ -24,6 +24,7 @@ developers = integration/b2g-inbound,integration/fx-team,releases/mozilla-aurora
 tb-bugs = releases/comm-aurora,releases/comm-beta,comm-central
 mozreview = hgcustom/version-control-tools,webtools/reviewboard
 vcs = hgcustom/version-control-tools
+gfx = projects/graphics
 
 [treestatus]
 server = https://api.pub.build.mozilla.org/treestatus/trees
@@ -32,5 +33,5 @@ server = https://api.pub.build.mozilla.org/treestatus/trees
 server = https://bugzilla.mozilla.org/
 user = @bugzilla.user@
 password = @bugzilla.password@
-pulse = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,integration/autoland,mozilla-central,hgcustom/version-control-tools,mozilla-build,webtools/reviewboard
+pulse = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,integration/autoland,mozilla-central,hgcustom/version-control-tools,mozilla-build,webtools/reviewboard,projects/graphics
 leave_open = integration/*,mozilla-central
