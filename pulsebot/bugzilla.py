@@ -54,7 +54,7 @@ class Bugzilla(object):
 
     def post_comment(self, bug, comment):
         if 'api_key' not in self._session.params:
-            self._session.params['api_key'] = self._apikey
+            self._session.params['api_key'] = self._api_key
 
         try:
             post_url = '%s/rest/bug/%d/comment' % (self._server, bug)
