@@ -83,8 +83,7 @@ class PulseDispatcher(object):
                 config.parser.has_option('bugzilla', 'password') and
                 config.parser.has_option('bugzilla', 'user')):
             self.bugzilla = Bugzilla(config.bugzilla.server,
-                                     config.bugzilla.user,
-                                     config.bugzilla.password)
+                                     config.bugzilla.api_key)
 
         if config.parser.has_option('pulse', 'max_checkins'):
             self.max_checkins = config.pulse.max_checkins

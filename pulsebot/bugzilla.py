@@ -11,23 +11,10 @@ class BugzillaError(Exception):
 
 
 class Bugzilla(object):
-    def __init__(self, server, login, password):
+    def __init__(self, server, api_key):
         self._server = server.rstrip('/')
-        self._login = login
-        self._password = password
+        self._api_key = api_key
         self._session = requests.Session()
-
-    def get_token(self):
-        try:
-            r = self._session.get('%s/rest/login' % self._server, params={
-                'login': self._login,
-                'password': self._password
-            })
-            r.raise_for_status()
-            r = r.json()
-            return r['token']
-        except:
-            raise BugzillaError()
 
     def get_fields(self, bug, fields):
         bug_url = '%s/rest/bug/%d?include_fields=%s' % (
@@ -66,8 +53,8 @@ class Bugzilla(object):
         return [c.get('text', '') for c in comments]
 
     def post_comment(self, bug, comment):
-        if 'token' not in self._session.params:
-            self._session.params['token'] = self.get_token()
+        if 'api_key' not in self._session.params:
+            self._session.params['api_key'] = self._apikey
 
         try:
             post_url = '%s/rest/bug/%d/comment' % (self._server, bug)
@@ -76,16 +63,11 @@ class Bugzilla(object):
             })
             r.raise_for_status()
         except:
-            # If token expired, try again with a new one
-            if r.status_code == 401:
-                del self._session.params['token']
-                self.post_comment(bug, comment)
-            else:
-                raise BugzillaError()
+            raise BugzillaError()
 
     def update_bug(self, bug, **kwargs):
-        if 'token' not in self._session.params:
-            self._session.params['token'] = self.get_token()
+        if 'api_key' not in self._session.params:
+            self._session.params['api_key'] = self._api_key
 
         try:
             post_url = '%s/rest/bug/%d' % (self._server, bug)
@@ -94,9 +76,4 @@ class Bugzilla(object):
                 headers={'Content-Type': 'application/json'})
             r.raise_for_status()
         except:
-            # If token expired, try again with a new one
-            if r.status_code == 401:
-                del self._session.params['token']
-                self.update_bug(bug, **kwargs)
-            else:
-                raise BugzillaError()
+            raise BugzillaError()
