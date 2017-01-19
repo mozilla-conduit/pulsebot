@@ -80,8 +80,7 @@ class PulseDispatcher(object):
         self.backout_delay = 600
 
         if (config.parser.has_option('bugzilla', 'server') and
-                config.parser.has_option('bugzilla', 'password') and
-                config.parser.has_option('bugzilla', 'user')):
+                config.parser.has_option('bugzilla', 'api_key')):
             self.bugzilla = Bugzilla(config.bugzilla.server,
                                      config.bugzilla.api_key)
 

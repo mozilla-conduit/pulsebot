@@ -42,8 +42,7 @@ class Config(SopelConfig):
             raise Exception('Missing configuration: pulse.password')
 
         if (self.parser.has_option('bugzilla', 'server') and
-                self.parser.has_option('bugzilla', 'password') and
-                self.parser.has_option('bugzilla', 'user')):
+                self.parser.has_option('bugzilla', 'api_key')):
             server = self.bugzilla.server
             if not server.lower().startswith('https://'):
                 raise Exception('bugzilla.server must be a HTTPS url')
