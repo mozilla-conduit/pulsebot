@@ -82,11 +82,16 @@ class PulseHgPushes(PulseListener):
                 revlink = '%s/rev/%s' \
                     % (repo, short_node)
 
-                push_data['changesets'].append({
+                desc = [l.strip() for l in cs['desc'].splitlines()]
+                data = {
                     'revlink': revlink,
-                    'desc': cs['desc'].splitlines()[0].strip(),
+                    'desc': desc[0].strip(),
                     'author': cs['author'].split(' <')[0].strip(),
-                })
+                }
+                for l in desc:
+                    if l.startswith('Source-Repo:'):
+                        data['source-repo'] = l.split(' ', 1)[1]
+                push_data['changesets'].append(data)
 
             yield push_data
 
@@ -195,3 +200,39 @@ class TestPushesInfo(unittest.TestCase):
 
         self.maxDiff = None
         self.assertEquals(pushes, results)
+
+        message = {'payload': {
+            'repo_url':
+                'https://hg.mozilla.org/integration/autoland',
+            'pushlog_pushes': [
+                {'push_full_json_url':
+                    'https://hg.mozilla.org/integration/autoland/'
+                    'json-pushes?version=2&full=1&startID=36889&endID=36890'},
+            ],
+        }}
+
+        pushes = list(PulseHgPushes.get_pushes_info(message))
+
+        self.assertEquals([
+            p['source-repo']
+            for p in pushes[0]['changesets']
+            if 'source-repo' in p
+        ], ['https://github.com/servo/servo'] * 8274)
+
+        pushes[0]['changesets'] = [
+            p
+            for p in pushes[0]['changesets']
+            if 'source-repo' not in p
+        ]
+
+        self.maxDiff = None
+        servo_results = [{
+            'changesets': [{
+                'author': 'Gregory Szorc',
+                'revlink': 'https://hg.mozilla.org/integration/autoland/rev/be030db91f00',
+                'desc': 'Bug 1322769 - Free the oxidized lizzard, vendor Servo'
+            }],
+            'pushlog': 'https://hg.mozilla.org/integration/autoland/pushloghtml?startID=36889&endID=36890',
+            'user': u'gszorc@mozilla.com'
+        }]
+        self.assertEquals(pushes, servo_results)
