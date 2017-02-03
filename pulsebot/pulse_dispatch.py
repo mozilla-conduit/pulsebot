@@ -919,7 +919,8 @@ class TestPulseDispatcher(unittest.TestCase):
         self.assertEquals(test.bugzilla, [])
 
         test_push = push('repo')
-        test_push['changesets'][0]['source-repo'] = 'https://github.com/servo/servo'
+        test_push['changesets'][0]['source-repo'] = \
+            'https://github.com/servo/servo'
         test = TestPulseDispatcher(bugzilla_branches, dispatch, test_push)
         self.assertEquals(test.irc, [])
         self.assertEquals(test.bugzilla, [])

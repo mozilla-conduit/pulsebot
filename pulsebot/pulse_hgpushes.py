@@ -229,10 +229,12 @@ class TestPushesInfo(unittest.TestCase):
         servo_results = [{
             'changesets': [{
                 'author': 'Gregory Szorc',
-                'revlink': 'https://hg.mozilla.org/integration/autoland/rev/be030db91f00',
+                'revlink': 'https://hg.mozilla.org/integration/autoland/'
+                           'rev/be030db91f00',
                 'desc': 'Bug 1322769 - Free the oxidized lizzard, vendor Servo'
             }],
-            'pushlog': 'https://hg.mozilla.org/integration/autoland/pushloghtml?startID=36889&endID=36890',
+            'pushlog': 'https://hg.mozilla.org/integration/autoland/'
+                       'pushloghtml?startID=36889&endID=36890',
             'user': u'gszorc@mozilla.com'
         }]
         self.assertEquals(pushes, servo_results)
