@@ -168,6 +168,8 @@ class PulseDispatcher(object):
         info_for_bugs = {}
 
         for cs in push['changesets']:
+            if cs.get('source-repo', '').startswith('https://github.com/'):
+                continue
             bugs = parse_bugs(cs['desc'])
             if bugs:
                 if bugs[0] not in info_for_bugs:
@@ -913,5 +915,11 @@ class TestPulseDispatcher(unittest.TestCase):
         }])
 
         test = TestPulseDispatcher(bugzilla_branches, dispatch, push('foo'))
+        self.assertEquals(test.irc, [])
+        self.assertEquals(test.bugzilla, [])
+
+        test_push = push('repo')
+        test_push['changesets'][0]['source-repo'] = 'https://github.com/servo/servo'
+        test = TestPulseDispatcher(bugzilla_branches, dispatch, test_push)
         self.assertEquals(test.irc, [])
         self.assertEquals(test.bugzilla, [])
