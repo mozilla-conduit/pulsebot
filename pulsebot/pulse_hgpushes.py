@@ -88,6 +88,8 @@ class PulseHgPushes(PulseListener):
                     'desc': desc[0].strip(),
                     'author': cs['author'].split(' <')[0].strip(),
                 }
+                if len(cs['parents']) > 1:
+                    data['is_merge'] = True
                 for l in desc:
                     if l.startswith('Source-Repo:'):
                         data['source-repo'] = l.split(' ', 1)[1]
@@ -231,7 +233,9 @@ class TestPushesInfo(unittest.TestCase):
                 'author': 'Gregory Szorc',
                 'revlink': 'https://hg.mozilla.org/integration/autoland/'
                            'rev/be030db91f00',
-                'desc': 'Bug 1322769 - Free the oxidized lizzard, vendor Servo'
+                'desc': 'Bug 1322769 - Free the oxidized lizzard, vendor '
+                        'Servo',
+                'is_merge': True,
             }],
             'pushlog': 'https://hg.mozilla.org/integration/autoland/'
                        'pushloghtml?startID=36889&endID=36890',
