@@ -128,7 +128,7 @@ class PulseDispatcher(object):
 
         # Kind of gross
         last_desc = changesets[-1]['desc'] if changesets else ''
-        merge = 'merge' in last_desc or 'Merge' in last_desc
+        merge = changesets[-1].get('is_merge') if changesets else False
 
         group_changesets = merge or len(changesets) > max_checkins
 
@@ -331,6 +331,7 @@ class TestPulseDispatcher(unittest.TestCase):
         'author': 'Sheriff',
         'revlink': 'https://server/repo/rev/890abcdef012',
         'desc': 'Merge branch into repo',
+        'is_merge': True,
     }]
 
     def test_create_messages(self):
