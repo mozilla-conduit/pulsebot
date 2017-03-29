@@ -90,6 +90,8 @@ class PulseHgPushes(PulseListener):
                 }
                 if len(cs['parents']) > 1:
                     data['is_merge'] = True
+                if cs['branch'] != "default":
+                    data['branch'] = cs['branch']
                 for l in desc:
                     if l.startswith('Source-Repo:'):
                         data['source-repo'] = l.split(' ', 1)[1]
@@ -242,3 +244,88 @@ class TestPushesInfo(unittest.TestCase):
             'user': u'gszorc@mozilla.com'
         }]
         self.assertEquals(pushes, servo_results)
+
+        message = {'payload': {
+            'repo_url':
+                'https://hg.mozilla.org/integration/mozilla-inbound/',
+            'pushlog_pushes': [
+                {'push_full_json_url':
+                    'https://hg.mozilla.org/integration/mozilla-inbound/'
+                    'json-pushes?version=2&full=1&startID=30963&endID=30964'}
+            ],
+        }}
+
+        pushes = list(PulseHgPushes.get_pushes_info(message))
+
+        self.maxDiff = None
+        branch_results = [{
+            'pushlog':
+                'https://hg.mozilla.org/integration/mozilla-inbound/'
+                'pushloghtml?startID=30963&endID=30964',
+            'user': 'mozilla@noorenberghe.ca',
+            'changesets': [{
+                'author': 'Matthew Noorenberghe',
+                'revlink':
+                    'https://hg.mozilla.org/integration/mozilla-inbound/'
+                    'rev/25093037bf15',
+                'desc':
+                    'Bug 845692 - Close version 2.0 release branches. '
+                    'a=bhearsum',
+                'branch': 'COMM2000_20110114_RELBRANCH',
+            }, {
+                'author': 'Matthew Noorenberghe',
+                'revlink':
+                    'https://hg.mozilla.org/integration/mozilla-inbound/'
+                    'rev/ab389a306b4c',
+                'desc':
+                    'Bug 845692 - Close version 2.0 release branches. '
+                    'a=bhearsum',
+                'branch': 'GECKO20b10_2011012115_RELBRANCH',
+            }, {
+                'author': 'Matthew Noorenberghe',
+                'revlink':
+                    'https://hg.mozilla.org/integration/mozilla-inbound/'
+                    'rev/987ccd4b66b0',
+                'desc':
+                    'Bug 845692 - Close version 2.0 release branches. '
+                    'a=bhearsum',
+                'branch': 'GECKO20b11pre_20110126_RELBRANCH',
+            }, {
+                'author': 'Matthew Noorenberghe',
+                'revlink':
+                    'https://hg.mozilla.org/integration/mozilla-inbound/'
+                    'rev/c16fafdf2f99',
+                'desc':
+                    'Bug 845692 - Close version 2.0 release branches. '
+                    'a=bhearsum',
+                'branch': 'GECKO20b11_2011020209_RELBRANCH',
+            }, {
+                'author': 'Matthew Noorenberghe',
+                'revlink':
+                    'https://hg.mozilla.org/integration/mozilla-inbound/'
+                    'rev/a2e691986b0c',
+                'desc':
+                    'Bug 845692 - Close version 2.0 release branches. '
+                    'a=bhearsum',
+                'branch': 'GECKO20b12pre_20110216_RELBRANCH',
+            }, {
+                'author': 'Matthew Noorenberghe',
+                'revlink':
+                    'https://hg.mozilla.org/integration/mozilla-inbound/'
+                    'rev/6bcf231bd430',
+                'desc':
+                    'Bug 845692 - Close version 2.0 release branches. '
+                    'a=bhearsum',
+                'branch': 'GECKO20b12_2011022218_RELBRANCH',
+            }, {
+                'author': 'Matthew Noorenberghe',
+                'revlink':
+                    'https://hg.mozilla.org/integration/mozilla-inbound/'
+                    'rev/fb4cf6555081',
+                'desc':
+                    'Bug 845692 - Close version 2.0 release branches. '
+                    'a=bhearsum',
+                'branch': 'COMM2000_20110314_RELBRANCH',
+            }],
+        }]
+        self.assertEquals(pushes, branch_results)
