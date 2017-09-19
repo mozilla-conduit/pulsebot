@@ -136,6 +136,8 @@ class PulseDispatcher(object):
             for cs in changesets:
                 revlink = cs['revlink']
                 desc = cs['desc']
+                if cs.get('branch'):
+                    revlink += " [%s]" % (cs['branch'])
 
                 if group_changesets:
                     bugs = parse_bugs(desc)
@@ -146,7 +148,9 @@ class PulseDispatcher(object):
                     yield "%s - %s - %s" % (revlink, author, desc)
 
         if group_changesets:
-            group = '%s - %d changesets' % (push['pushlog'], len(changesets))
+            pushlog = "%s [%s]" % (push['pushlog'], changesets[-1]['branch'])\
+                if changesets[-1].get('branch') else push['pushlog']
+            group = '%s - %d changesets' % (pushlog, len(changesets))
 
         if merge:
             group += ' - %s' % last_desc
@@ -332,6 +336,11 @@ class TestPulseDispatcher(unittest.TestCase):
         'revlink': 'https://server/repo/rev/890abcdef012',
         'desc': 'Merge branch into repo',
         'is_merge': True,
+    }, {
+        'author': 'Com Munity',
+        'revlink': 'https://server/repo/rev/6e4e7985aba3',
+        'desc': 'Bug 46 - Add tags',
+        'branch': 'subproject',
     }]
 
     def test_create_messages(self):
@@ -403,6 +412,15 @@ class TestPulseDispatcher(unittest.TestCase):
         self.assertEquals(list(PulseDispatcher.create_messages(push)), [
             'https://server/repo/pushloghtml?startID=1&endID=2 - 8 changesets '
             '- Merge branch into repo'
+        ])
+
+        branchpush = {
+            'pushlog': 'https://server/repo/pushloghtml?startID=2&endID=3',
+            'changesets': self.CHANGESETS[8:9],
+        }
+        self.assertEquals(list(PulseDispatcher.create_messages(branchpush)), [
+            'https://server/repo/rev/6e4e7985aba3 [subproject] - '
+            'Com Munity - Bug 46 - Add tags'
         ])
 
     def test_munge_for_bugzilla(self):
