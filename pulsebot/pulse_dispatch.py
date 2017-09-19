@@ -63,6 +63,8 @@ class BugInfo(object):
             'desc': cs['desc'],
             'is_backout': bool(BACKOUT_RE.match(cs['desc'])),
         })
+        if cs.get('branch'):
+            self.changesets[-1]['branch'] = cs['branch']
 
     def __iter__(self):
         return iter(self.changesets)
@@ -185,7 +187,8 @@ class PulseDispatcher(object):
 
     @staticmethod
     def bugzilla_summary(cs):
-        yield cs['revlink']
+        yield '%s [%s]' % (cs['revlink'], cs['branch']) if cs.get('branch') \
+            else cs['revlink']
 
         desc = cs['desc']
         matches = [m for m in BUG_RE.finditer(desc)
@@ -615,6 +618,16 @@ class TestPulseDispatcher(unittest.TestCase):
         bz.fields[42] = {'keywords': {'leave-open'}}
         do_push(push)
         self.assertEquals(bz.data, {})
+
+        bz.clear()
+        push['changesets'] = self.CHANGESETS[8:9]
+        comments = {46: [
+            'Pushed by foo@bar.com:\n'
+            'https://server/repo/rev/6e4e7985aba3 [subproject]\n'
+            'Add tags'
+        ]}
+        do_push(push)
+        self.assertEquals(bz.comments, comments)
 
     def test_bugzilla_summary(self):
         def summary_equals(desc, summary):
