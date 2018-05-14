@@ -48,7 +48,7 @@ class PulseHgPushes(PulseListener):
             try:
                 for data in PulseHgPushes.get_push_info_from(push_url):
                     yield data
-            except:
+            except Exception:
                 logger = logging.getLogger('pulsebot.hgpushes')
                 logger.error("Failure on %s", push_url)
                 for line in traceback.format_exc().splitlines():

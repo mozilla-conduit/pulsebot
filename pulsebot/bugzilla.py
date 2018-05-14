@@ -26,7 +26,7 @@ class Bugzilla(object):
             r = requests.get(bug_url)
             r.raise_for_status()
             bug_data = r.json()
-        except:
+        except Exception:
             raise BugzillaError()
 
         if 'error' in bug_data:
@@ -42,7 +42,7 @@ class Bugzilla(object):
             r = requests.get(bug_url)
             r.raise_for_status()
             bug_data = r.json()
-        except:
+        except Exception:
             raise BugzillaError()
 
         if 'error' in bug_data:
@@ -62,7 +62,7 @@ class Bugzilla(object):
                 'comment': comment,
             })
             r.raise_for_status()
-        except:
+        except Exception:
             raise BugzillaError()
 
     def update_bug(self, bug, **kwargs):
@@ -75,5 +75,5 @@ class Bugzilla(object):
                 post_url, data=json.dumps(kwargs),
                 headers={'Content-Type': 'application/json'})
             r.raise_for_status()
-        except:
+        except Exception:
             raise BugzillaError()

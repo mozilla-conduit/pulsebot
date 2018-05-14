@@ -68,7 +68,7 @@ if __name__ == '__main__':
 
     try:
         current_config = Config('pulsebot.cfg')
-    except:
+    except Exception:
         current_config = None
     config = Config('pulsebot.cfg.in')
     new_config = RawConfigParser()

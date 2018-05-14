@@ -29,7 +29,7 @@ class PulseListener(object):
             try:
                 import uuid
                 self.applabel = 'pulsebot-%s' % uuid.uuid4()
-            except:
+            except ImportError:
                 from datetime import datetime
                 self.applabel = 'pulsebot-%s' % datetime.now()
         else:
