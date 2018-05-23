@@ -34,4 +34,4 @@ server = https://api.pub.build.mozilla.org/treestatus/trees
 server = https://bugzilla.mozilla.org/
 api_key = @bugzilla.api_key@
 pulse = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,integration/autoland,mozilla-central,hgcustom/version-control-tools,mozilla-build,webtools/reviewboard,projects/graphics,automation/conduit,comm-central,build/puppet
-leave_open = integration/*,mozilla-central,projects/*
+leave_open = integration/*,mozilla-central,projects/*,build/puppet
