@@ -12,6 +12,7 @@ import urlparse
 import unittest
 from collections import (
     defaultdict,
+    OrderedDict,
 )
 from Queue import Queue, Empty
 from pulsebot.bugzilla import (
@@ -63,6 +64,8 @@ class BugInfo(object):
             'desc': cs['desc'],
             'is_backout': bool(BACKOUT_RE.match(cs['desc'])),
         })
+        if cs.get('branch'):
+            self.changesets[-1]['branch'] = cs['branch']
 
     def __iter__(self):
         return iter(self.changesets)
@@ -136,6 +139,8 @@ class PulseDispatcher(object):
             for cs in changesets:
                 revlink = cs['revlink']
                 desc = cs['desc']
+                if cs.get('branch'):
+                    revlink += " [%s]" % (cs['branch'])
 
                 if group_changesets:
                     bugs = parse_bugs(desc)
@@ -146,7 +151,9 @@ class PulseDispatcher(object):
                     yield "%s - %s - %s" % (revlink, author, desc)
 
         if group_changesets:
-            group = '%s - %d changesets' % (push['pushlog'], len(changesets))
+            pushlog = "%s [%s]" % (push['pushlog'], changesets[-1]['branch'])\
+                if changesets[-1].get('branch') else push['pushlog']
+            group = '%s - %d changesets' % (pushlog, len(changesets))
 
         if merge:
             group += ' - %s' % last_desc
@@ -242,18 +249,39 @@ class PulseDispatcher(object):
 
             if cs_to_write:
                 is_backout = all(cs['is_backout'] for cs in cs_to_write)
+                has_branches = any('branch' in cs for cs in cs_to_write)
+                branches = OrderedDict()
+
+                for cs in cs_to_write:
+                    key = cs.get('branch', 'default')
+                    if key in branches:
+                        branches[key].append(cs)
+                    else:
+                        branches[key] = [cs]
 
                 def comment():
-                    if is_backout:
-                        if info.pusher:
-                            yield 'Backout by %s:' % info.pusher
+                    start = True
+                    for branch in branches:
+                        if start:
+                            start = False
                         else:
-                            yield 'Backout:'
-                    elif info.pusher:
-                        yield 'Pushed by %s:' % info.pusher
-                    for cs in cs_to_write:
-                        for line in self.bugzilla_summary(cs):
-                            yield line
+                            yield ''
+                        branch_info = (
+                                ' on the default branch' if branch == 'default'
+                                else ' on the branch %s' % branch) if \
+                            has_branches else ''
+                        if is_backout:
+                            if info.pusher:
+                                yield 'Backout by %s%s:' \
+                                    % (info.pusher, branch_info)
+                            else:
+                                yield 'Backout%s:' % branch_info
+                        elif info.pusher:
+                            yield 'Pushed by %s%s:' \
+                                % (info.pusher, branch_info)
+                        for cs in branches[branch]:
+                            for line in self.bugzilla_summary(cs):
+                                yield line
 
                 try:
                     fields = ('whiteboard', 'keywords')
@@ -332,6 +360,11 @@ class TestPulseDispatcher(unittest.TestCase):
         'revlink': 'https://server/repo/rev/890abcdef012',
         'desc': 'Merge branch into repo',
         'is_merge': True,
+    }, {
+        'author': 'Com Munity',
+        'revlink': 'https://server/repo/rev/6e4e7985aba3',
+        'desc': 'Bug 46 - Add tags',
+        'branch': 'subproject',
     }]
 
     def test_create_messages(self):
@@ -403,6 +436,15 @@ class TestPulseDispatcher(unittest.TestCase):
         self.assertEquals(list(PulseDispatcher.create_messages(push)), [
             'https://server/repo/pushloghtml?startID=1&endID=2 - 8 changesets '
             '- Merge branch into repo'
+        ])
+
+        branchpush = {
+            'pushlog': 'https://server/repo/pushloghtml?startID=2&endID=3',
+            'changesets': self.CHANGESETS[8:9],
+        }
+        self.assertEquals(list(PulseDispatcher.create_messages(branchpush)), [
+            'https://server/repo/rev/6e4e7985aba3 [subproject] - '
+            'Com Munity - Bug 46 - Add tags'
         ])
 
     def test_munge_for_bugzilla(self):
@@ -597,6 +639,75 @@ class TestPulseDispatcher(unittest.TestCase):
         bz.fields[42] = {'keywords': {'leave-open'}}
         do_push(push)
         self.assertEquals(bz.data, {})
+
+        bz.clear()
+        push['changesets'] = self.CHANGESETS[8:9]
+        comments = {46: [
+            'Pushed by foo@bar.com on the branch subproject:\n'
+            'https://server/repo/rev/6e4e7985aba3\n'
+            'Add tags'
+        ]}
+        do_push(push)
+        self.assertEquals(bz.comments, comments)
+
+        bz.clear()
+        push['changesets'] = [{
+            'author': 'foo',
+            'revlink': 'https://server/repo/rev/6e4e7985aba3',
+            'desc': 'Bug 47 - Foo',
+            'branch': 'foo',
+        }, {
+            'author': 'foo',
+            'revlink': 'https://server/repoa/rev/1234567890ab',
+            'desc': 'Bug 47 - Bar',
+            'branch': 'foo',
+        }, {
+            'author': 'qux',
+            'revlink': 'https://server/repoa/rev/234567890abc',
+            'desc': 'Bug 47 - Qux',
+            'branch': 'qux',
+        }]
+        comments = {47: [
+            'Pushed by foo@bar.com on the branch foo:\n'
+            'https://server/repo/rev/6e4e7985aba3\n'
+            'Foo\n'
+            'https://server/repoa/rev/1234567890ab\n'
+            'Bar\n'
+            '\n'
+            'Pushed by foo@bar.com on the branch qux:\n'
+            'https://server/repoa/rev/234567890abc\n'
+            'Qux'
+        ]}
+        do_push(push)
+        self.assertEquals(bz.comments, comments)
+
+        bz.clear()
+        push['changesets'][1].pop('branch')
+        comments2 = {47: [
+            'Pushed by foo@bar.com on the branch foo:\n'
+            'https://server/repo/rev/6e4e7985aba3\n'
+            'Foo\n'
+            '\n'
+            'Pushed by foo@bar.com on the default branch:\n'
+            'https://server/repoa/rev/1234567890ab\n'
+            'Bar\n'
+            '\n'
+            'Pushed by foo@bar.com on the branch qux:\n'
+            'https://server/repoa/rev/234567890abc\n'
+            'Qux'
+        ]}
+        do_push(push)
+        self.assertEquals(bz.comments, comments2)
+
+        bz.clear()
+        push['changesets'][1]['branch'] = 'foo'
+        push['changesets'] = [
+            push['changesets'][0],
+            push['changesets'][2],
+            push['changesets'][1],
+        ]
+        do_push(push)
+        self.assertEquals(bz.comments, comments)
 
     def test_bugzilla_summary(self):
         def summary_equals(desc, summary):
