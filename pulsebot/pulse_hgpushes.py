@@ -86,7 +86,7 @@ class PulseHgPushes(PulseListener):
                 data = {
                     'revlink': revlink,
                     'desc': desc[0].strip(),
-                    'author': cs['author'].split(' <')[0].strip(),
+                    'author': cs['author'].split(' <')[0].strip(' "'),
                 }
                 if len(cs['parents']) > 1:
                     data['is_merge'] = True
