@@ -242,3 +242,23 @@ class TestPushesInfo(unittest.TestCase):
             'user': u'gszorc@mozilla.com'
         }]
         self.assertEquals(pushes, servo_results)
+
+        url = ('https://hg.mozilla.org/releases/mozilla-beta/json-pushes'
+               '?version=2&full=1&startID=9426&endID=9427')
+        pushes = list(PulseHgPushes.get_push_info_from(url))
+
+        self.maxDiff = None
+        quoted_user_results = [{
+            'changesets': [{
+                'author': 'Mozilla Releng Treescript',
+                'revlink': 'https://hg.mozilla.org/releases/mozilla-beta/rev/'
+                           'c12b6a853caa',
+                'desc': 'No bug - Tagging '
+                        '801112336847960bbb9a018695cf09ea437dc137 with '
+                        'FIREFOX_62_0b5_BUILD1 a=release CLOSED TREE',
+            }],
+            'pushlog': 'https://hg.mozilla.org/releases/mozilla-beta/'
+                       'pushloghtml?startID=9426&endID=9427',
+            'user': u'ffxbld'
+        }]
+        self.assertEquals(pushes, quoted_user_results)
