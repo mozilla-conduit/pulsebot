@@ -256,7 +256,7 @@ class PulseDispatcher(object):
                             yield line
 
                 try:
-                    fields = ('whiteboard', 'keywords')
+                    fields = ('whiteboard', 'keywords', 'status')
                     values = self.bugzilla.get_fields(info.bug, fields)
                     # Delay comments for backouts and checkin-needed in
                     # whiteboard
@@ -277,7 +277,9 @@ class PulseDispatcher(object):
                             }
                         # TODO: reopen closed bugs on backout
                         if ('leave-open' not in values.get('keywords', {}) and
-                                not is_backout and not info.leave_open):
+                                not is_backout and not info.leave_open and
+                                values.get('status', '') not in
+                                ('VERIFIED', 'CLOSED')):
                             kwargs['status'] = 'RESOLVED'
                             kwargs['resolution'] = 'FIXED'
                         if kwargs:
@@ -595,6 +597,11 @@ class TestPulseDispatcher(unittest.TestCase):
 
         bz.clear()
         bz.fields[42] = {'keywords': {'leave-open'}}
+        do_push(push)
+        self.assertEquals(bz.data, {})
+
+        bz.clear()
+        bz.fields[42] = {'status': 'VERIFIED'}
         do_push(push)
         self.assertEquals(bz.data, {})
 
