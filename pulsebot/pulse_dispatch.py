@@ -279,7 +279,7 @@ class PulseDispatcher(object):
                         if ('leave-open' not in values.get('keywords', {}) and
                                 not is_backout and not info.leave_open and
                                 values.get('status', '') not in
-                                ('VERIFIED', 'CLOSED')):
+                                ('VERIFIED', 'CLOSED', 'RESOLVED')):
                             kwargs['status'] = 'RESOLVED'
                             kwargs['resolution'] = 'FIXED'
                         if kwargs:
