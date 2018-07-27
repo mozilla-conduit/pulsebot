@@ -26,6 +26,7 @@ mozreview = webtools/reviewboard
 vcs = hgcustom/version-control-tools
 gfx = projects/graphics
 conduit = automation/conduit
+ci = build/ci-admin,build/ci-configuration
 
 [treestatus]
 server = https://api.pub.build.mozilla.org/treestatus/trees
