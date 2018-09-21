@@ -28,7 +28,7 @@ gfx = projects/graphics
 conduit = automation/conduit
 
 [treestatus]
-server = https://api.pub.build.mozilla.org/treestatus/trees
+server = https://treestatus.mozilla-releng.net/trees
 
 [bugzilla]
 server = https://bugzilla.mozilla.org/
