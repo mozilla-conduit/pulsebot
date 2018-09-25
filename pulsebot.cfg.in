@@ -11,6 +11,8 @@ prefix =
 admins =
 verify_ssl = True
 timeout = 120
+auth_method = nickserv
+auth_password = @core.auth_password@
 
 [pulse]
 applabel = @pulse.applabel@
