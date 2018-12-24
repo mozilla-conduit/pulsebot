@@ -13,8 +13,8 @@ class BugzillaError(Exception):
 class Bugzilla(object):
     def __init__(self, server, api_key):
         self._server = server.rstrip('/')
-        self._api_key = api_key
         self._session = requests.Session()
+        self._session.params['api_key'] = self._api_key
 
     def get_fields(self, bug, fields):
         bug_url = '%s/rest/bug/%d?include_fields=%s' % (
@@ -23,7 +23,7 @@ class Bugzilla(object):
             '+'.join(fields),
         )
         try:
-            r = requests.get(bug_url)
+            r = self._session.get(bug_url)
             r.raise_for_status()
             bug_data = r.json()
         except Exception:
@@ -39,7 +39,7 @@ class Bugzilla(object):
             self._server, bug)
 
         try:
-            r = requests.get(bug_url)
+            r = self._session.get(bug_url)
             r.raise_for_status()
             bug_data = r.json()
         except Exception:
@@ -53,9 +53,6 @@ class Bugzilla(object):
         return [c.get('text', '') for c in comments]
 
     def post_comment(self, bug, comment):
-        if 'api_key' not in self._session.params:
-            self._session.params['api_key'] = self._api_key
-
         try:
             post_url = '%s/rest/bug/%d/comment' % (self._server, bug)
             r = self._session.post(post_url, data={
@@ -66,9 +63,6 @@ class Bugzilla(object):
             raise BugzillaError()
 
     def update_bug(self, bug, **kwargs):
-        if 'api_key' not in self._session.params:
-            self._session.params['api_key'] = self._api_key
-
         try:
             post_url = '%s/rest/bug/%d' % (self._server, bug)
             r = self._session.put(
