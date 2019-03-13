@@ -14,6 +14,7 @@ class Bugzilla(object):
     def __init__(self, server, api_key):
         self._server = server.rstrip('/')
         self._session = requests.Session()
+        self._session.headers.update({'User-Agent': 'glandium/pulsebot'})
         self._session.params['api_key'] = api_key
 
     def get_fields(self, bug, fields):
