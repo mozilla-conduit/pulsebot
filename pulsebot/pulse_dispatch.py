@@ -271,9 +271,12 @@ class PulseDispatcher(object):
                     else:
                         message = '\n'.join(comment())
                         kwargs = {}
-                        if 'checkin-needed' in values.get('keywords', {}):
+                        remove_keywords = [kw for kw in ['checkin-needed',
+                                                         'checkin-needed-tb']
+                                           if kw in values.get('keywords', {})]
+                        if remove_keywords:
                             kwargs['keywords'] = {
-                                'remove': ['checkin-needed']
+                                'remove': remove_keywords
                             }
                         # TODO: reopen closed bugs on backout
                         if ('leave-open' not in values.get('keywords', {}) and
