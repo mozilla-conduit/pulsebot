@@ -28,7 +28,6 @@ mozreview = webtools/reviewboard
 vcs = hgcustom/version-control-tools
 gfx = projects/graphics
 conduit = automation/conduit
-releng-bots = build/ci-admin,build/ci-configuration
 
 [treestatus]
 server = https://treestatus.mozilla-releng.net/trees
@@ -36,5 +35,5 @@ server = https://treestatus.mozilla-releng.net/trees
 [bugzilla]
 server = https://bugzilla.mozilla.org/
 api_key = @bugzilla.api_key@
-pulse = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,integration/autoland,mozilla-central,hgcustom/version-control-tools,mozilla-build,webtools/reviewboard,projects/graphics,automation/conduit,comm-central,build/puppet
-leave_open = integration/*,mozilla-central,projects/*,build/puppet
+pulse = integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,integration/autoland,mozilla-central,hgcustom/version-control-tools,mozilla-build,webtools/reviewboard,projects/graphics,automation/conduit,comm-central,ci/ci-configuration,ci/ci-admin,ci/taskgraph
+leave_open = integration/*,mozilla-central,projects/*,ci/*
