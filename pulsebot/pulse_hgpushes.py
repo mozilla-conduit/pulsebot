@@ -16,11 +16,11 @@ from pulse import PulseListener
 class PulseHgPushes(PulseListener):
     def __init__(self, config):
         super(PulseHgPushes, self).__init__(
-            config.pulse.user,
-            config.pulse.password,
+            config.pulse_user,
+            config.pulse_password,
             'exchange/hgpushes/v1',
             '#',
-            config.pulse.applabel
+            config.pulse_applabel
             if config.parser.has_option('pulse', 'applabel') else None
         )
 
@@ -82,7 +82,7 @@ class PulseHgPushes(PulseListener):
                 revlink = '%s/rev/%s' \
                     % (repo, short_node)
 
-                desc = [l.strip() for l in cs['desc'].splitlines()]
+                desc = [line.strip() for line in cs['desc'].splitlines()]
                 data = {
                     'revlink': revlink,
                     'desc': desc[0].strip(),
@@ -90,9 +90,9 @@ class PulseHgPushes(PulseListener):
                 }
                 if len(cs['parents']) > 1:
                     data['is_merge'] = True
-                for l in desc:
-                    if l.startswith('Source-Repo:'):
-                        data['source-repo'] = l.split(' ', 1)[1]
+                for line in desc:
+                    if line.startswith('Source-Repo:'):
+                        data['source-repo'] = line.split(' ', 1)[1]
                 push_data['changesets'].append(data)
 
             yield push_data

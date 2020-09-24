@@ -3,8 +3,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import fnmatch
-from sopel.config import Config as SopelConfig
 from collections import defaultdict
+from ConfigParser import RawConfigParser
 
 
 class DispatchConfig(object):
@@ -25,46 +25,57 @@ class DispatchConfig(object):
         self._data[key].add(value)
 
 
-class Config(SopelConfig):
-    def __init__(self, *args, **kwargs):
-        super(Config, self).__init__(*args, **kwargs)
-        self.dispatch = DispatchConfig()
+class Config(object):
+    def __init__(self, filename):
         self.bugzilla_branches = DispatchConfig()
         self.bugzilla_leave_open = DispatchConfig()
 
-        if not self.parser.has_option('core', 'enable'):
-            self.core.enable = ['']
+        self.parser = RawConfigParser()
+        self.parser.read(filename)
 
         if not self.parser.has_option('pulse', 'user'):
             raise Exception('Missing configuration: pulse.user')
+        self.pulse_user = self.parser.get('pulse', 'user')
 
         if not self.parser.has_option('pulse', 'password'):
             raise Exception('Missing configuration: pulse.password')
+        self.pulse_password = self.parser.get('pulse', 'password')
+        if self.parser.has_option('pulse', 'applabel'):
+            self.pulse_applabel = self.parser.get('pulse', 'applabel')
+        if self.parser.has_option('pulse', 'applabel'):
+            self.pulse_applabel = self.parser.get('pulse', 'applabel')
+        if self.parser.has_option('pulse', 'max_checkins'):
+            self.pulse_max_checkins = self.parser.get('pulse', 'max_checkins')
 
         if (self.parser.has_option('bugzilla', 'server') and
                 self.parser.has_option('bugzilla', 'api_key')):
-            server = self.bugzilla.server
+            server = self.parser.get('bugzilla', 'server')
+            self.bugzilla_server = server
+            self.bugzilla_api_key = self.parser.get('bugzilla', 'api_key')
             if not server.lower().startswith('https://'):
                 raise Exception('bugzilla.server must be a HTTPS url')
 
             if self.parser.has_option('bugzilla', 'pulse'):
-                for branch in self.bugzilla.get_list('pulse'):
+                for branch in self.parser.get('bugzilla', 'pulse').split(','):
                     self.bugzilla_branches.add(branch)
 
             if self.parser.has_option('bugzilla', 'leave_open'):
-                for branch in self.bugzilla.get_list('leave_open'):
+                for branch in self.parser.get('bugzilla', 'leave_open') \
+                        .split(','):
                     self.bugzilla_leave_open.add(branch)
 
-        if self.parser.has_section('channels'):
-            for chan, _ in self.parser.items('channels'):
-                for branch in self.channels.get_list(chan):
-                    self.dispatch.add(branch, '#' + chan)
+
+def get_input(prompt):
+    """Get decoded input from the terminal (equivalent to python 3's ``input``).
+    """
+    if sys.version_info.major >= 3:
+        return input(prompt)
+    else:
+        return raw_input(prompt).decode('utf8')
 
 
 if __name__ == '__main__':
     import sys
-    from sopel.tools import get_input
-    from ConfigParser import RawConfigParser
 
     try:
         current_config = Config('pulsebot.cfg')

@@ -3,9 +3,9 @@
 pulsebot
 ========
 
-Pulsebot is a bot listening to pulse.mozilla.org for mercurial changes and notifying channels accordingly. It uses the willie bot for all interactions with IRC servers.
+Pulsebot is a bot listening to pulse.mozilla.org for mercurial changes and notifying bugzilla accordingly.
 
-The current setup used on irc.mozilla.org can be replicated as follows:
+The current live setup can be replicated as follows:
 
 ```
 sudo apt-get install python-virtualenv
