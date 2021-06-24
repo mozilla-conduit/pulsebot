@@ -1,5 +1,3 @@
-[![Build Status](https://travis-ci.org/glandium/pulsebot.svg?branch=master)](https://travis-ci.org/glandium/pulsebot)
-
 pulsebot
 ========
 
