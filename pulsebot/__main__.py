@@ -2,11 +2,10 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from config import Config
-from pulse_dispatch import PulseDispatcher
+from pulsebot.config import Config
+from pulsebot.pulse_dispatch import PulseDispatcher
 
 
-config = Config('pulsebot.cfg')
-
+config = Config()
 dispatcher = PulseDispatcher(config)
 dispatcher.change_reporter()

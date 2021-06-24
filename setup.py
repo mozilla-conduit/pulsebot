@@ -16,10 +16,8 @@ setup(
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     name="Pulsebot",
-    # Note: Please change the `updater.py::check_for_updates` method if the format
-    # would be different than >=X.Y
-    python_requires=">=2.7",
+    python_requires=">=3.9",
     url="https://github.com/mozilla-conduit/pulsebot",
-    version="0.1",
+    version="0.2",
     zip_safe=False,
 )

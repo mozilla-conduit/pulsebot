@@ -4,7 +4,7 @@
 
 import fnmatch
 from collections import defaultdict
-from ConfigParser import RawConfigParser
+import os
 
 
 class DispatchConfig(object):
@@ -13,7 +13,7 @@ class DispatchConfig(object):
 
     def get(self, key):
         result = self._data.get(key, set())
-        for k, v in self._data.iteritems():
+        for k, v in self._data.items():
             if k == '*' or ('*' in k and fnmatch.fnmatch(key, k)):
                 result |= v
         return result
@@ -26,81 +26,31 @@ class DispatchConfig(object):
 
 
 class Config(object):
-    def __init__(self, filename):
+    def __init__(self):
+        self.pulse_user = os.getenv("PULSE_USER")
+        self.pulse_password = os.getenv("PULSE_PASSWORD")
+        self.pulse_applabel = os.getenv("PULSE_APPLABEL")
+        self.pulse_max_checkins = os.getenv("PULSE_MAX_CHECKINS")
+        self.bugzilla_server = os.getenv("BUGZILLA_SERVER")
+        self.bugzilla_api_key = os.getenv("BUGZILLA_API_KEY")
+
         self.bugzilla_branches = DispatchConfig()
         self.bugzilla_leave_open = DispatchConfig()
 
-        self.parser = RawConfigParser()
-        self.parser.read(filename)
+        if not self.pulse_user:
+            raise Exception('Missing configuration: pulse_user')
 
-        if not self.parser.has_option('pulse', 'user'):
-            raise Exception('Missing configuration: pulse.user')
-        self.pulse_user = self.parser.get('pulse', 'user')
+        if not self.pulse_password:
+            raise Exception('Missing configuration: pulse_password')
 
-        if not self.parser.has_option('pulse', 'password'):
-            raise Exception('Missing configuration: pulse.password')
-        self.pulse_password = self.parser.get('pulse', 'password')
-        if self.parser.has_option('pulse', 'applabel'):
-            self.pulse_applabel = self.parser.get('pulse', 'applabel')
-        if self.parser.has_option('pulse', 'applabel'):
-            self.pulse_applabel = self.parser.get('pulse', 'applabel')
-        if self.parser.has_option('pulse', 'max_checkins'):
-            self.pulse_max_checkins = self.parser.get('pulse', 'max_checkins')
+        if self.bugzilla_server and self.bugzilla_api_key:
+            if not self.bugzilla_server.lower().startswith('https://'):
+                raise Exception('bugzilla_server must be a HTTPS url')
 
-        if (self.parser.has_option('bugzilla', 'server') and
-                self.parser.has_option('bugzilla', 'api_key')):
-            server = self.parser.get('bugzilla', 'server')
-            self.bugzilla_server = server
-            self.bugzilla_api_key = self.parser.get('bugzilla', 'api_key')
-            if not server.lower().startswith('https://'):
-                raise Exception('bugzilla.server must be a HTTPS url')
-
-            if self.parser.has_option('bugzilla', 'pulse'):
-                for branch in self.parser.get('bugzilla', 'pulse').split(','):
+            if os.getenv("BUGZILLA_PULSE"):
+                for branch in os.getenv("BUGZILLA_PULSE").split(','):
                     self.bugzilla_branches.add(branch)
 
-            if self.parser.has_option('bugzilla', 'leave_open'):
-                for branch in self.parser.get('bugzilla', 'leave_open') \
-                        .split(','):
+            if os.getenv("BUGZILLA_LEAVE_OPEN"):
+                for branch in os.getenv("BUGZILLA_LEAVE_OPEN").split(','):
                     self.bugzilla_leave_open.add(branch)
-
-
-def get_input(prompt):
-    """Get decoded input from the terminal (equivalent to python 3's ``input``).
-    """
-    if sys.version_info.major >= 3:
-        return input(prompt)
-    else:
-        return raw_input(prompt).decode('utf8')
-
-
-if __name__ == '__main__':
-    import sys
-
-    try:
-        current_config = Config('pulsebot.cfg')
-    except Exception:
-        current_config = None
-    config = Config('pulsebot.cfg.in')
-    new_config = RawConfigParser()
-
-    for section in config.parser.sections():
-        new_config.add_section(section)
-
-        for name, value in config.parser.items(section):
-            if value.startswith('@') and value.endswith('@'):
-                s, n = value[1:-1].split('.', 1)
-                if current_config and current_config.parser.has_option(s, n):
-                    value = current_config.parser.get(s, n)
-                else:
-                    prompt = 'Please enter a value for %s.%s: ' % (section,
-                                                                   name)
-                    while True:
-                        sys.stderr.write(prompt)
-                        value = get_input('')
-                        if value:
-                            break
-
-            new_config.set(section, name, value)
-
-    new_config.write(sys.stdout)

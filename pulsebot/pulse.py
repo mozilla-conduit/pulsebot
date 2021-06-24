@@ -7,7 +7,7 @@ import threading
 from kombu import Exchange
 from mozillapulse.config import PulseConfiguration
 from mozillapulse.consumers import GenericConsumer
-from Queue import Queue, Empty
+from queue import Queue, Empty
 
 
 class PulseConsumer(GenericConsumer):

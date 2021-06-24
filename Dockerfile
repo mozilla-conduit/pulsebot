@@ -1,4 +1,4 @@
-FROM python:2.7
+FROM python:3.9
 
 ENV PYTHONPATH /app
 ENV PORT 8000
@@ -12,13 +12,8 @@ COPY requirements.txt .
 RUN pip install --no-cache -r requirements.txt
 
 COPY . /app
-
-RUN pip install -e .
-
 RUN chown -R app:app /app
-
-RUN python -m pulsebot.config > pulsebot.cfg
 
 USER app
 ENTRYPOINT ["python"]
-CMD ["-m pulsebot"]
+CMD ["-m", "pulsebot"]

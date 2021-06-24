@@ -1,0 +1,18 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+services:
+  pulsebot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - PULSE_USER=USER
+      - PULSE_PASSWORD=PASSWORD
+      - PULSE_APPLABEL=APPLABEL
+      - PULSE_MAX_CHECKINS=10
+      - BUGZILLA_SERVER=https://bugzilla.mozilla.org
+      - BUGZILLA_API_KEY=APIKEY
+      - BUGZILLA_PULSE=integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,integration/autoland,mozilla-central,hgcustom/version-control-tools,mozilla-build,webtools/reviewboard,projects/graphics,automation/conduit,comm-central,ci/ci-configuration,ci/ci-admin,ci/taskgraph
+      - BUGZILLA_LEAVE_OPEN=integration/*,mozilla-central,projects/*,ci/*

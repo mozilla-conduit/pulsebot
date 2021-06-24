@@ -10,7 +10,7 @@ import requests
 import traceback
 import unittest
 from collections import OrderedDict
-from pulse import PulseListener
+from pulsebot.pulse import PulseListener
 
 
 class PulseHgPushes(PulseListener):
@@ -21,7 +21,7 @@ class PulseHgPushes(PulseListener):
             'exchange/hgpushes/v1',
             '#',
             config.pulse_applabel
-            if config.parser.has_option('pulse', 'applabel') else None
+            if config.pulse_applabel else None
         )
 
     def __iter__(self):
@@ -68,7 +68,7 @@ class PulseHgPushes(PulseListener):
 
         data = r.json(object_pairs_hook=OrderedDict)
 
-        for id, d in data.get('pushes', {}).iteritems():
+        for id, d in data.get('pushes', {}).items():
             id = int(id)
             push_data = {
                 'pushlog': '%s/pushloghtml?startID=%d&endID=%d'
@@ -169,7 +169,7 @@ class TestPushesInfo(unittest.TestCase):
         pushes = list(PulseHgPushes.get_pushes_info(message))
 
         self.maxDiff = None
-        self.assertEquals(pushes, [results[1]])
+        self.assertEqual(pushes, [results[1]])
 
         message = {'payload': {
             'repo_url':
@@ -186,7 +186,7 @@ class TestPushesInfo(unittest.TestCase):
 
         pushes = list(PulseHgPushes.get_pushes_info(message))
 
-        self.assertEquals(pushes, results)
+        self.assertEqual(pushes, results)
 
         message = {'payload': {
             'repo_url':
@@ -201,7 +201,7 @@ class TestPushesInfo(unittest.TestCase):
         pushes = list(PulseHgPushes.get_pushes_info(message))
 
         self.maxDiff = None
-        self.assertEquals(pushes, results)
+        self.assertEqual(pushes, results)
 
         message = {'payload': {
             'repo_url':
@@ -215,7 +215,7 @@ class TestPushesInfo(unittest.TestCase):
 
         pushes = list(PulseHgPushes.get_pushes_info(message))
 
-        self.assertEquals([
+        self.assertEqual([
             p['source-repo']
             for p in pushes[0]['changesets']
             if 'source-repo' in p
@@ -241,4 +241,4 @@ class TestPushesInfo(unittest.TestCase):
                        'pushloghtml?startID=36889&endID=36890',
             'user': u'gszorc@mozilla.com'
         }]
-        self.assertEquals(pushes, servo_results)
+        self.assertEqual(pushes, servo_results)
