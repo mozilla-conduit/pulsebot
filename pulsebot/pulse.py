@@ -13,12 +13,14 @@ from queue import Queue, Empty
 class PulseConsumer(GenericConsumer):
     def __init__(self, exchange, **kwargs):
         super(PulseConsumer, self).__init__(
-            PulseConfiguration(**kwargs), exchange, **kwargs)
+            PulseConfiguration(**kwargs), exchange, **kwargs
+        )
 
 
 class PulseListener(object):
-    def __init__(self, user=None, password=None, exchange=None, topic='#',
-                 applabel=None):
+    def __init__(
+        self, user=None, password=None, exchange=None, topic="#", applabel=None
+    ):
         self.shutting_down = False
         assert exchange
         self.exchange = exchange
@@ -28,16 +30,18 @@ class PulseListener(object):
             # Let's generate a unique label for the script
             try:
                 import uuid
-                self.applabel = 'pulsebot-%s' % uuid.uuid4()
+
+                self.applabel = "pulsebot-%s" % uuid.uuid4()
             except ImportError:
                 from datetime import datetime
-                self.applabel = 'pulsebot-%s' % datetime.now()
+
+                self.applabel = "pulsebot-%s" % datetime.now()
         else:
             self.applabel = applabel
 
         self.auth = {
-            'user': user,
-            'password': password,
+            "user": user,
+            "password": password,
         }
 
         self.queue = Queue(42)
@@ -52,8 +56,11 @@ class PulseListener(object):
         while not self.shutting_down:
             # Connect to pulse
             pulse = PulseConsumer(
-                exchange=self.exchange, applabel=self.applabel, durable=True,
-                **self.auth)
+                exchange=self.exchange,
+                applabel=self.applabel,
+                durable=True,
+                **self.auth
+            )
 
             # Tell pulse that you want to listen for all messages ('#' is
             # everything) and give a function to call every time there is a
@@ -62,10 +69,11 @@ class PulseListener(object):
 
             # Manually do the work of pulse.listen() so as to be able to
             # cleanly get out of it if necessary.
-            exchange = Exchange(pulse.exchange, type='topic')
+            exchange = Exchange(pulse.exchange, type="topic")
             queue = pulse._create_queue(exchange, pulse.topic[0])
             consumer = pulse.connection.Consumer(
-                queue, auto_declare=False, callbacks=[pulse.callback])
+                queue, auto_declare=False, callbacks=[pulse.callback]
+            )
             consumer.queues[0].queue_declare()
             # Bind to the first key.
             consumer.queues[0].queue_bind()

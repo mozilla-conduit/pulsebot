@@ -12,16 +12,16 @@ class BugzillaError(Exception):
 
 class Bugzilla(object):
     def __init__(self, server, api_key):
-        self._server = server.rstrip('/')
+        self._server = server.rstrip("/")
         self._session = requests.Session()
-        self._session.headers.update({'User-Agent': 'pulsebot'})
-        self._session.params['api_key'] = api_key
+        self._session.headers.update({"User-Agent": "pulsebot"})
+        self._session.params["api_key"] = api_key
 
     def get_fields(self, bug, fields):
-        bug_url = '%s/rest/bug/%d?include_fields=%s' % (
+        bug_url = "%s/rest/bug/%d?include_fields=%s" % (
             self._server,
             bug,
-            '+'.join(fields),
+            "+".join(fields),
         )
         try:
             r = self._session.get(bug_url)
@@ -30,14 +30,13 @@ class Bugzilla(object):
         except Exception:
             raise BugzillaError()
 
-        if 'error' in bug_data:
+        if "error" in bug_data:
             raise BugzillaError()
 
-        return bug_data.get('bugs', [{}])[0]
+        return bug_data.get("bugs", [{}])[0]
 
     def get_comments(self, bug):
-        bug_url = '%s/rest/bug/%d/comment?include_fields=text' % (
-            self._server, bug)
+        bug_url = "%s/rest/bug/%d/comment?include_fields=text" % (self._server, bug)
 
         try:
             r = self._session.get(bug_url)
@@ -46,29 +45,33 @@ class Bugzilla(object):
         except Exception:
             raise BugzillaError()
 
-        if 'error' in bug_data:
+        if "error" in bug_data:
             raise BugzillaError()
 
-        comments = (bug_data['bugs'].get('%d' % bug, {})
-                    .get('comments', []))
-        return [c.get('text', '') for c in comments]
+        comments = bug_data["bugs"].get("%d" % bug, {}).get("comments", [])
+        return [c.get("text", "") for c in comments]
 
     def post_comment(self, bug, comment):
         try:
-            post_url = '%s/rest/bug/%d/comment' % (self._server, bug)
-            r = self._session.post(post_url, data={
-                'comment': comment,
-            })
+            post_url = "%s/rest/bug/%d/comment" % (self._server, bug)
+            r = self._session.post(
+                post_url,
+                data={
+                    "comment": comment,
+                },
+            )
             r.raise_for_status()
         except Exception:
             raise BugzillaError()
 
     def update_bug(self, bug, **kwargs):
         try:
-            post_url = '%s/rest/bug/%d' % (self._server, bug)
+            post_url = "%s/rest/bug/%d" % (self._server, bug)
             r = self._session.put(
-                post_url, data=json.dumps(kwargs),
-                headers={'Content-Type': 'application/json'})
+                post_url,
+                data=json.dumps(kwargs),
+                headers={"Content-Type": "application/json"},
+            )
             r.raise_for_status()
         except Exception:
             raise BugzillaError()

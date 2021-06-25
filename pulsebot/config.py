@@ -14,7 +14,7 @@ class DispatchConfig(object):
     def get(self, key):
         result = self._data.get(key, set())
         for k, v in self._data.items():
-            if k == '*' or ('*' in k and fnmatch.fnmatch(key, k)):
+            if k == "*" or ("*" in k and fnmatch.fnmatch(key, k)):
                 result |= v
         return result
 
@@ -38,19 +38,19 @@ class Config(object):
         self.bugzilla_leave_open = DispatchConfig()
 
         if not self.pulse_user:
-            raise Exception('Missing configuration: pulse_user')
+            raise Exception("Missing configuration: pulse_user")
 
         if not self.pulse_password:
-            raise Exception('Missing configuration: pulse_password')
+            raise Exception("Missing configuration: pulse_password")
 
         if self.bugzilla_server and self.bugzilla_api_key:
-            if not self.bugzilla_server.lower().startswith('https://'):
-                raise Exception('bugzilla_server must be a HTTPS url')
+            if not self.bugzilla_server.lower().startswith("https://"):
+                raise Exception("bugzilla_server must be a HTTPS url")
 
             if os.getenv("BUGZILLA_PULSE"):
-                for branch in os.getenv("BUGZILLA_PULSE").split(','):
+                for branch in os.getenv("BUGZILLA_PULSE").split(","):
                     self.bugzilla_branches.add(branch)
 
             if os.getenv("BUGZILLA_LEAVE_OPEN"):
-                for branch in os.getenv("BUGZILLA_LEAVE_OPEN").split(','):
+                for branch in os.getenv("BUGZILLA_LEAVE_OPEN").split(","):
                     self.bugzilla_leave_open.add(branch)
