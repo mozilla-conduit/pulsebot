@@ -40,13 +40,13 @@ jobs:
           command: docker build -t pulsebot .
       - deploy:
           command: |
-            [ -n "$DOCKERHUB_REPO" && -n "$DOCKER_USER" && -n "$DOCKER_PASS" ] || exit 0
+            [[ -n "$DOCKERHUB_REPO" && -n "$DOCKER_USER" && -n "$DOCKER_PASS" ]] || exit 0
             echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
             # deploy main
-            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+            if [[ "${CIRCLE_BRANCH}" == "main" ]]; then
               docker tag pulsebot ${DOCKERHUB_REPO}:latest
               docker push ${DOCKERHUB_REPO}:latest
-            elif  [ ! -z "${CIRCLE_TAG}" ]; then
+            elif [[ ! -z "${CIRCLE_TAG}" ]]; then
             # deploy a release tag...
               echo "${DOCKERHUB_REPO}:${CIRCLE_TAG}"
               docker tag pulsebot "${DOCKERHUB_REPO}:${CIRCLE_TAG}"
