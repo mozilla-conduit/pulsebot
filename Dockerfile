@@ -1,4 +1,4 @@
-FROM python:3.9
+FROM python:3.10
 
 ENV PYTHONPATH /app
 ENV PORT 8000
