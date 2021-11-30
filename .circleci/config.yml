@@ -10,13 +10,11 @@ jobs:
       - checkout
       - setup_remote_docker
       - run:
-          name: Install Docker Compose
-          command: |
-            apk update && apk add py-pip gcc python3-dev musl-dev \
-              libffi-dev openssl-dev make
-            pip install docker-compose
-          environment:
-            CRYPTOGRAPHY_DONT_BUILD_RUST: 1
+          name: Install Tools
+          command: apk update && apk add docker-compose py3-flake8
+      - run:
+          name: flake8 Test
+          command: flake8 pulsebot
       - run:
           name: Build Docker Image
           command: docker-compose build
