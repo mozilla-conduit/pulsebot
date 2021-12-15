@@ -4,7 +4,12 @@
 
 from pulsebot.config import Config
 from pulsebot.pulse_dispatch import PulseDispatcher
+import logging
+import logging.config
 
+logging.config.fileConfig('logging.ini')
+logger = logging.getLogger('pulsebot')
+logger.info('starting up')
 
 config = Config()
 dispatcher = PulseDispatcher(config)

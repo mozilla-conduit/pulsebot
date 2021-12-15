@@ -8,6 +8,10 @@ from kombu import Exchange
 from mozillapulse.config import PulseConfiguration
 from mozillapulse.consumers import GenericConsumer
 from queue import Queue, Empty
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class PulseConsumer(GenericConsumer):
@@ -51,6 +55,7 @@ class PulseListener(object):
     def pulse_listener(self):
         def got_message(data, message):
             message.ack()
+            logger.info('received message')
             self.queue.put(data)
 
         while not self.shutting_down:
@@ -93,6 +98,7 @@ class PulseListener(object):
 
     def shutdown(self):
         if not self.shutting_down:
+            logger.info('shutting down')
             self.shutting_down = True
             self.listener_thread.join()
 

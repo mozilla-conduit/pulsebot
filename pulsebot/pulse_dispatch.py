@@ -21,6 +21,9 @@ from pulsebot.bugzilla import (
 from pulsebot.pulse_hgpushes import PulseHgPushes
 from pulsebot.config import DispatchConfig
 
+
+logger = logging.getLogger(__name__)
+
 REVLINK_RE = re.compile("/rev/[^/]*$")
 
 
@@ -83,14 +86,19 @@ class PulseDispatcher(object):
         self.backout_delay = 600
 
         if config.bugzilla_server and config.bugzilla_api_key:
-            self.bugzilla = Bugzilla(config.bugzilla_server, config.bugzilla_api_key)
+            self.bugzilla = Bugzilla(
+                config.bugzilla_server,
+                config.bugzilla_api_key
+            )
 
         if config.pulse_max_checkins:
             self.max_checkins = config.pulse_max_checkins
 
         if self.config.bugzilla_branches:
             self.bugzilla_queue = Queue(42)
-            self.bugzilla_thread = threading.Thread(target=self.bugzilla_reporter)
+            self.bugzilla_thread = threading.Thread(
+                target=self.bugzilla_reporter
+            )
             self.bugzilla_thread.start()
 
     def change_reporter(self):
@@ -100,7 +108,7 @@ class PulseDispatcher(object):
     def report_one_push(self, push):
         url = urlparse(push["pushlog"])
         branch = os.path.dirname(url.path).strip("/")
-
+        logger.info(f'report_one_push: {url.netloc}{url.path} {branch}')
         if branch in self.config.bugzilla_branches:
             for info in self.munge_for_bugzilla(push):
                 if branch in self.config.bugzilla_leave_open:
@@ -128,6 +136,7 @@ class PulseDispatcher(object):
                 if group_changesets:
                     bugs = parse_bugs(desc)
                     if bugs and bugs[0] not in group_bugs:
+                        logger.info(f'bug found: {bugs[0]}')
                         group_bugs.append(bugs[0])
                 else:
                     author = cs["author"]
@@ -163,6 +172,7 @@ class PulseDispatcher(object):
                 continue
             bugs = parse_bugs(cs["desc"])
             if bugs:
+                logger.info(f'bug found: {bugs[0]}')
                 if bugs[0] not in info_for_bugs:
                     info_for_bugs[bugs[0]] = BugInfo(bugs[0], push["user"])
                 info_for_bugs[bugs[0]].add_changeset(cs)
@@ -175,23 +185,25 @@ class PulseDispatcher(object):
         yield cs["revlink"]
 
         desc = cs["desc"]
-        matches = [m for m in BUG_RE.finditer(desc) if int(m.group(2)) < 100000000]
+        matches = [
+            m for m in BUG_RE.finditer(desc) if int(m.group(2)) < 100000000
+        ]
 
         match = matches[0]
         if match.start() == 0:
-            desc = desc[match.end() :].lstrip(" \t-,.:")
+            desc = desc[match.end():].lstrip(" \t-,.:")
         else:
             backout = BACKOUT_RE.match(desc)
-            if backout and not desc[backout.end() : match.start()].strip():
-                desc = desc[: backout.end()] + desc[match.end() :]
+            if backout and not desc[backout.end(): match.start()].strip():
+                desc = desc[: backout.end()] + desc[match.end():]
             elif (
                 desc[match.start() - 1] == "("
-                and desc[match.end() : match.end() + 1] == ")"
+                and desc[match.end(): match.end() + 1] == ")"
             ):
                 desc = (
                     desc[: match.start() - 1].rstrip()
                     + " "
-                    + desc[match.end() + 1 :].lstrip()
+                    + desc[match.end() + 1:].lstrip()
                 )
 
         yield desc
@@ -288,9 +300,7 @@ class PulseDispatcher(object):
                         else:
                             self.bugzilla.post_comment(info.bug, message)
                 except Exception:
-                    logging.getLogger("pulsebot.buzilla").error(
-                        "Failed to send comment to bug %d", info.bug
-                    )
+                    logger.exception(f"Failed to send comment to bug {info.bug}")
 
     def shutdown(self):
         self.hgpushes.shutdown()
