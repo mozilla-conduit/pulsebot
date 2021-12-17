@@ -19,7 +19,7 @@ class Bugzilla(object):
         self._server = server.rstrip("/")
         self._session = requests.Session()
         self._session.headers.update({"User-Agent": "pulsebot"})
-        self._session.params["api_key"] = api_key
+        self._session.headers.update({"X-Bugzilla-API-Key": api_key})
 
     def get_fields(self, bug, fields):
         bug_url = "%s/rest/bug/%d?include_fields=%s" % (
