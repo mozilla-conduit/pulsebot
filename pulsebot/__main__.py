@@ -9,6 +9,7 @@ import logging.config
 
 logging.config.fileConfig('logging.ini')
 logger = logging.getLogger('pulsebot')
+logger.propagate = False
 logger.info('starting up')
 
 config = Config()
