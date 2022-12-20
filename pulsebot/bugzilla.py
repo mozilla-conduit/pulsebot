@@ -66,3 +66,4 @@ class Bugzilla(object):
 
     def update_bug(self, bug, **kwargs):
         self._call("PUT", f"rest/bug/{bug}", json=kwargs)
+
