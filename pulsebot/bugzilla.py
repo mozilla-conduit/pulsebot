@@ -32,7 +32,7 @@ class Bugzilla(object):
         if method not in ("get", "post", "put"):
             raise BugzillaError(f"Unknown method: {method} {bug_url}")
         r = getattr(requests, method)(bug_url, headers=self._headers, **kwargs)
-        if r.status_code != 200:
+        if r.status_code not in (200, 201):
             raise BugzillaError(
                 f"Request Error: {method.upper()} {bug_url} {r.status_code} {r.reason}"
             )
