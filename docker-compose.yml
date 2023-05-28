@@ -16,4 +16,5 @@ services:
       - BUGZILLA_SERVER=https://bugzilla.mozilla.org
       - BUGZILLA_API_KEY=APIKEY
       - BUGZILLA_PULSE=integration/b2g-inbound,integration/fx-team,integration/mozilla-inbound,integration/autoland,mozilla-central,hgcustom/version-control-tools,mozilla-build,webtools/reviewboard,projects/graphics,automation/conduit,comm-central,ci/ci-configuration,ci/ci-admin,ci/taskgraph
+      - BUGZILLA_UPLIFT=releases/mozilla-release,releases/mozilla-beta,releases/mozilla-esr
       - BUGZILLA_LEAVE_OPEN=integration/*,mozilla-central,projects/*,ci/*
