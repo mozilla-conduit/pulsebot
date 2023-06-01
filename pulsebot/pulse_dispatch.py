@@ -204,7 +204,7 @@ class PulseDispatcher(object):
                 # on mozilla-inbound when they were mentioned when landing
                 # on mozilla-central.
                 if not any(url[-12:] in comment.get("text", "") for comment in comments):
-                   cs_to_write.append(cs_info)
+                    cs_to_write.append(cs_info)
 
             if not cs_to_write:
                 continue
@@ -222,7 +222,7 @@ class PulseDispatcher(object):
                         else:
                             yield "Backout:"
                     elif info.pusher:
-                       yield "Pushed by %s:" % info.pusher
+                        yield "Pushed by %s:" % info.pusher
                     for cs in cs_to_write:
                         for line in self.bugzilla_summary(cs):
                             yield line
@@ -464,7 +464,7 @@ class TestPulseDispatcher(unittest.TestCase):
                 self.shutting_down = True
                 self.bugzilla_thread.join()
 
-        def do_push(push, leave_open = False):
+        def do_push(push, leave_open=False):
             dispatcher = TestPulseDispatcher()
             if leave_open:
                 push["pushlog"] = re.sub('repo', 'leave-open', push["pushlog"])
@@ -557,7 +557,7 @@ class TestPulseDispatcher(unittest.TestCase):
         )
 
         bz.clear()
-        do_push(push, leave_open = True)
+        do_push(push, leave_open=True)
         self.assertEqual(bz.data, {})
 
         bz.clear()
@@ -750,7 +750,7 @@ class TestPulseDispatcher(unittest.TestCase):
         test = TestPulseDispatcher(bugzilla_branches, push("repoc"))
         self.assertEqual(test.bugzilla, [])
 
-        bugzilla_branches= DispatchConfig()
+        bugzilla_branches = DispatchConfig()
         bugzilla_branches.add("repo*")
         bugzilla_branches = bugzilla_branches, {}, ["uplift-repo"]
         test = TestPulseDispatcher(bugzilla_branches, push("repo"))
