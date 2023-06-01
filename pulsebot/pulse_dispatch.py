@@ -191,23 +191,20 @@ class PulseDispatcher(object):
 
             try:
                 comments = self.bugzilla.get_comments(info.bug)
-                comments_string = ""
-                for c in comments:
-                    comments_string += c.get("text", "") + "\n"
             except BugzillaError:
                 # Don't do anything on errors, such as "You are not authorized
                 # to access bug #xxxxx".
                 continue
 
             cs_to_write = []
-            for cs in info:
-                url = cs["revlink"]
+            for cs_info in info:
+                url = cs_info["revlink"]
                 # Only write about a changeset if it's never been mentioned
                 # at all. This makes us not emit changesets that e.g. land
                 # on mozilla-inbound when they were mentioned when landing
                 # on mozilla-central.
-                if url[-12:] not in comments_string:
-                    cs_to_write.append(cs)
+                if not any(url[-12:] in comment.get("text", "") for comment in comments):
+                   cs_to_write.append(cs_info)
 
             if not cs_to_write:
                 continue
