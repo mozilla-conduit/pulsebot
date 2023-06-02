@@ -36,6 +36,7 @@ class Config(object):
 
         self.bugzilla_branches = DispatchConfig()
         self.bugzilla_leave_open = DispatchConfig()
+        self.uplift_branches = DispatchConfig()
 
         if not self.pulse_user:
             raise Exception("Missing configuration: pulse_user")
@@ -54,3 +55,7 @@ class Config(object):
             if os.getenv("BUGZILLA_LEAVE_OPEN"):
                 for branch in os.getenv("BUGZILLA_LEAVE_OPEN").split(","):
                     self.bugzilla_leave_open.add(branch)
+
+            if os.getenv("BUGZILLA_UPLIFT"):
+                for branch in os.getenv("BUGZILLA_UPLIFT").split(","):
+                    self.uplift_branches.add(branch)

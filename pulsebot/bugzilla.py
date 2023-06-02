@@ -45,7 +45,7 @@ class Bugzilla(object):
             )
 
     def get_fields(self, bug, fields):
-        path = f"rest/bug/{bug}"
+        path = f"rest/pulsebot/bug/{bug}"
         bug_data = self._call(
             "GET", path, params={"include_fields": ",".join(fields)}
         )
@@ -53,16 +53,19 @@ class Bugzilla(object):
         return bug_data.get("bugs", [{}])[0]
 
     def get_comments(self, bug):
-        path = f"rest/bug/{bug}/comment"
+        path = f"rest/pulsebot/bug/{bug}/comment"
         bug_data = self._call(
-            "GET", path, params={"include_fields": "text"}
+            "GET", path, params={"include_fields": "text,tags"}
         )
         self._check_error("GET", path, bug_data)
         comments = bug_data["bugs"].get("%d" % bug, {}).get("comments", [])
-        return [c.get("text", "") for c in comments]
+        results = []
+        for c in comments:
+            results.append({"text": c.get("text", ""), "tags": c.get("tags", [])})
+        return results
 
-    def post_comment(self, bug, comment):
-        self._call("POST", f"rest/bug/{bug}/comment", json={"comment": comment})
+    def post_comment(self, bug, **kwargs):
+        self._call("POST", f"rest/pulsebot/bug/{bug}/comment", json=kwargs)
 
     def update_bug(self, bug, **kwargs):
-        self._call("PUT", f"rest/bug/{bug}", json=kwargs)
+        self._call("PUT", f"rest/pulsebot/bug/{bug}", json=kwargs)
