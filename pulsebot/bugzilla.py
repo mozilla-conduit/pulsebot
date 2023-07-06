@@ -34,7 +34,7 @@ class Bugzilla(object):
         r = getattr(requests, method)(bug_url, headers=self._headers, **kwargs)
         if r.status_code not in (200, 201):
             raise BugzillaError(
-                f"Request Error: {method.upper()} {bug_url} {r.status_code} {r.reason}"
+                f"Request Error: {method.upper()} {bug_url} {r.status_code} {r.reason} {r.text}"
             )
         return r.json()
 
@@ -65,7 +65,9 @@ class Bugzilla(object):
         return results
 
     def post_comment(self, bug, **kwargs):
+        kwargs["comment"] = kwargs["text"]
         self._call("POST", f"rest/pulsebot/bug/{bug}/comment", json=kwargs)
 
     def update_bug(self, bug, **kwargs):
-        self._call("PUT", f"rest/pulsebot/bug/{bug}", json=kwargs)
+        kwargs["ids"] = [bug]
+        self._call("PUT", "rest/pulsebot/bug", json=kwargs)
