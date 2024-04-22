@@ -25,25 +25,7 @@ logger = logging.getLogger(__name__)
 
 REVLINK_RE = re.compile("/rev/[^/]*$")
 APPROVE_RE = re.compile(" a=(.*)")
-
-# Stolen from pylib/mozautomation/mozautomation/commitparser.py from
-# https://hg.mozilla.org/hgcustom/version-control-tools
-BUG_RE = re.compile(
-    r"""# bug followed by any sequence of numbers, or
-        # a standalone sequence of numbers
-         (
-           (?:
-             bug |
-             b= |
-             # a sequence of 5+ numbers preceded by whitespace
-             (?=\b\#?\d{5,}) |
-             # numbers at the very beginning
-             ^(?=\d)
-           )
-           (?:\s*\#?)(\d+)(?=\b)
-         )""",
-    re.I | re.X,
-)
+BUG_RE = re.compile(r"""((?:bug|b=) (?:\s*\#?)(\d+)(?=\b))""", re.I | re.X)
 
 
 def parse_bugs(s):
