@@ -25,6 +25,15 @@ class DispatchConfig(object):
         self._data[key].add(value)
 
 
+def github_repos(mapping_str: str) -> DispatchConfig:
+    config = DispatchConfig()
+    for gh_map in mapping_str.split(","):
+        gh_repo, hg_repos = gh_map.split(":", maxsplit=1)
+        for hg_repo in hg_repos.split("|"):
+            config.add(hg_repo, gh_repo)
+    return config
+
+
 class Config(object):
     def __init__(self):
         self.pulse_user = os.getenv("PULSE_USER")
@@ -37,6 +46,7 @@ class Config(object):
         self.bugzilla_branches = DispatchConfig()
         self.bugzilla_leave_open = DispatchConfig()
         self.uplift_branches = DispatchConfig()
+        self.github_repos = github_repos(os.getenv("GITHUB", ""))
 
         if not self.pulse_user:
             raise Exception("Missing configuration: pulse_user")

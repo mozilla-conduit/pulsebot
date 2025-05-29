@@ -5,10 +5,14 @@
 
 from __future__ import unicode_literals
 
+from urllib.parse import urlparse
+
 import requests
 import traceback
 import unittest
 from collections import OrderedDict
+
+from pulsebot import config
 from pulsebot.pulse import PulseListener
 import logging
 
@@ -25,14 +29,15 @@ class PulseHgPushes(PulseListener):
             "#",
             config.pulse_applabel if config.pulse_applabel else None,
         )
+        self.github_repos = config.github_repos
 
     def __iter__(self):
         for message in super(PulseHgPushes, self).__iter__():
-            for push in self.get_pushes_info(message):
+            for push in self.get_pushes_info(message, self.github_repos):
                 yield push
 
     @staticmethod
-    def get_pushes_info(pulse_message):
+    def get_pushes_info(pulse_message, github_repos):
         # Sanity checks
         logger.info("get_pushes_info")
         try:
@@ -50,7 +55,7 @@ class PulseHgPushes(PulseListener):
                 continue
             logger.info(f"get_push_info_from: {push_url}")
             try:
-                for data in PulseHgPushes.get_push_info_from(push_url):
+                for data in PulseHgPushes.get_push_info_from(push_url, github_repos):
                     yield data
             except Exception:
                 logger.exception(f"Failure on {push_url}")
@@ -60,9 +65,14 @@ class PulseHgPushes(PulseListener):
                 continue
 
     @staticmethod
-    def get_push_info_from(push_url):
+    def get_push_info_from(push_url, github_repos):
         hg_repo = push_url[: push_url.rindex("/")]
-        git_repo = "https://github.com/mozilla-firefox/firefox"
+
+        gh_repo = None
+        url = urlparse(hg_repo)
+        gh_repo_names = github_repos.get(url.path.lstrip("/"))
+        if gh_repo_names:
+            gh_repo = f"https://github.com/{next(iter(gh_repo_names))}"
 
         r = requests.get(push_url)
         if r.status_code != requests.codes.ok:
@@ -87,8 +97,8 @@ class PulseHgPushes(PulseListener):
 
             for i, cs in enumerate(d.get("changesets", ())):
                 revlinks = [f"{hg_repo}/rev/{cs['node'][:12]}"]
-                if cs["git_node"]:
-                    revlinks.insert(0, f"{git_repo}/commit/{cs['git_node'][:12]}")
+                if cs["git_node"] and gh_repo:
+                    revlinks.insert(0, f"{gh_repo}/commit/{cs['git_node'][:12]}")
 
                 desc = [line.strip() for line in cs["desc"].splitlines()]
                 data = {
@@ -159,6 +169,8 @@ class TestPushesInfo(unittest.TestCase):
             },
         ]
 
+        github_repos = config.github_repos("mozilla-firefox/firefox:integration/autoland")
+
         # single push
 
         message = {
@@ -173,7 +185,7 @@ class TestPushesInfo(unittest.TestCase):
             }
         }
 
-        pushes = list(PulseHgPushes.get_pushes_info(message))
+        pushes = list(PulseHgPushes.get_pushes_info(message, github_repos))
 
         self.maxDiff = None
         self.assertEqual(pushes, [results[1]])
@@ -196,7 +208,7 @@ class TestPushesInfo(unittest.TestCase):
             }
         }
 
-        pushes = list(PulseHgPushes.get_pushes_info(message))
+        pushes = list(PulseHgPushes.get_pushes_info(message, github_repos))
 
         self.assertEqual(pushes, results)
 
@@ -214,7 +226,7 @@ class TestPushesInfo(unittest.TestCase):
             }
         }
 
-        pushes = list(PulseHgPushes.get_pushes_info(message))
+        pushes = list(PulseHgPushes.get_pushes_info(message, github_repos))
 
         self.maxDiff = None
         self.assertEqual(pushes, results)
