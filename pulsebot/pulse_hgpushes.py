@@ -61,7 +61,9 @@ class PulseHgPushes(PulseListener):
 
     @staticmethod
     def get_push_info_from(push_url):
-        repo = push_url[: push_url.rindex("/")]
+        hg_repo = push_url[: push_url.rindex("/")]
+        git_repo = "https://github.com/mozilla-firefox/firefox"
+
         r = requests.get(push_url)
         if r.status_code != requests.codes.ok:
             # If we were not successful, try again once.
@@ -77,19 +79,20 @@ class PulseHgPushes(PulseListener):
 
         for id, d in data.get("pushes", {}).items():
             id = int(id)
-            push_data = {
-                "pushlog": "%s/pushloghtml?startID=%d&endID=%d" % (repo, id - 1, id),
-                "user": d.get("user"),
-                "changesets": [],
-            }
+            push_data = dict(
+                pushlog="%s/pushloghtml?startID=%d&endID=%d" % (hg_repo, id - 1, id),
+                user=d.get("user"),
+                changesets=[],
+            )
 
-            for cs in d.get("changesets", ()):
-                short_node = cs["node"][:12]
-                revlink = "%s/rev/%s" % (repo, short_node)
+            for i, cs in enumerate(d.get("changesets", ())):
+                revlinks = [f"{hg_repo}/rev/{cs['node'][:12]}"]
+                if cs["git_node"]:
+                    revlinks.insert(0, f"{git_repo}/commit/{cs['git_node'][:12]}")
 
                 desc = [line.strip() for line in cs["desc"].splitlines()]
                 data = {
-                    "revlink": revlink,
+                    "revlinks": revlinks,
                     "desc": desc[0].strip(),
                     "author": cs["author"].split(" <")[0].strip(),
                 }
@@ -112,19 +115,28 @@ class TestPushesInfo(unittest.TestCase):
                     {
                         "author": "James Teh",
                         "desc": "Bug 1857116 part 1: Reinstate building of the IAccessible2 proxy dll. r=morgan",
-                        "revlink": "https://hg.mozilla.org/integration/autoland/rev/0453d4a52ea2",
+                        "revlinks": [
+                            "https://github.com/mozilla-firefox/firefox/commit/8dab41f4c61a",
+                            "https://hg.mozilla.org/integration/autoland/rev/0453d4a52ea2",
+                        ],
                     },
                     {
                         "author": "James Teh",
                         "desc": "Bug 1857116 part 2: Register the IAccessible2 proxy dll for automated tests on CI. "
                         "r=morgan,jmaher",
-                        "revlink": "https://hg.mozilla.org/integration/autoland/rev/3c559d1189a7",
+                        "revlinks": [
+                            "https://github.com/mozilla-firefox/firefox/commit/f609a8a873b6",
+                            "https://hg.mozilla.org/integration/autoland/rev/3c559d1189a7",
+                        ],
                     },
                     {
                         "author": "James Teh",
                         "desc": "Bug 1857116 part 3: Enable browser_textSelectionContainer.js on CI. Tag it as "
                         "os_integration so it is verified when upgrading Windows on CI. r=jmaher",
-                        "revlink": "https://hg.mozilla.org/integration/autoland/rev/b72610598081",
+                        "revlinks": [
+                            "https://github.com/mozilla-firefox/firefox/commit/f0e68fd22dc6",
+                            "https://hg.mozilla.org/integration/autoland/rev/b72610598081",
+                        ],
                     },
                 ],
                 "pushlog": "https://hg.mozilla.org/integration/autoland/pushloghtml?startID=232563&endID=232564",
@@ -136,7 +148,10 @@ class TestPushesInfo(unittest.TestCase):
                         "author": "Olivier Mehani",
                         "desc": "Bug 1967654 - Change line ending to Unix in _CardsSections.scss "
                         "r=reemhamz,home-newtab-reviewers",
-                        "revlink": "https://hg.mozilla.org/integration/autoland/rev/bc4f7219b7a5",
+                        "revlinks": [
+                            "https://github.com/mozilla-firefox/firefox/commit/731168ede47e",
+                            "https://hg.mozilla.org/integration/autoland/rev/bc4f7219b7a5",
+                        ],
                     }
                 ],
                 "pushlog": "https://hg.mozilla.org/integration/autoland/pushloghtml?startID=232564&endID=232565",

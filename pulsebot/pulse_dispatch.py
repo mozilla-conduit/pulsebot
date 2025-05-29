@@ -47,7 +47,7 @@ class BugInfo(object):
     def add_changeset(self, cs):
         self.changesets.append(
             {
-                "revlink": cs["revlink"],
+                "revlinks": cs["revlinks"],
                 "desc": cs["desc"],
                 "is_backout": bool(BACKOUT_RE.match(cs["desc"])),
             }
@@ -121,7 +121,8 @@ class PulseDispatcher(object):
 
     @staticmethod
     def bugzilla_summary(cs):
-        yield cs["revlink"]
+        for rev_link in cs["revlinks"]:
+            yield rev_link
 
         desc = cs["desc"]
         matches = [m for m in BUG_RE.finditer(desc) if int(m.group(2)) < 100000000]
@@ -176,13 +177,13 @@ class PulseDispatcher(object):
 
             cs_to_write = []
             for cs_info in info:
-                url = cs_info["revlink"]
+                hg_url = next(u for u in cs_info["revlinks"] if "/rev/" in u)
                 # Only write about a changeset if it's never been mentioned
                 # at all. This makes us not emit changesets that e.g. land
                 # on mozilla-inbound when they were mentioned when landing
                 # on mozilla-central.
                 if not any(
-                    url[-12:] in comment.get("text", "") for comment in comments
+                    hg_url[-12:] in comment.get("text", "") for comment in comments
                 ):
                     cs_to_write.append(cs_info)
 
@@ -194,7 +195,8 @@ class PulseDispatcher(object):
             def comment():
                 if info.uplift:
                     for cs in cs_to_write:
-                        yield cs["revlink"]
+                        for rev_link in cs["revlinks"]:
+                            yield rev_link
                 else:
                     if is_backout:
                         if info.pusher:
@@ -263,49 +265,57 @@ class TestPulseDispatcher(unittest.TestCase):
     CHANGESETS = [
         {
             "author": "Ann O'nymous",
-            "revlink": "https://server/repo/rev/1234567890ab",
+            "revlinks": ["https://server/repo/rev/1234567890ab"],
             "desc": "Bug 42 - Changed something",
         },
         {
             "author": "Ann O'nymous",
-            "revlink": "https://server/repo/rev/234567890abc",
+            "revlinks": ["https://server/repo/rev/234567890abc"],
             "desc": "Fixup for bug 42 - Changed something else",
         },
         {
             "author": "Anon Ymous",
-            "revlink": "https://server/repo/rev/34567890abcd",
+            "revlinks": ["https://server/repo/rev/34567890abcd"],
             "desc": "Bug 43 - Lorem ipsum",
         },
         {
             "author": "Anon Ymous",
-            "revlink": "https://server/repo/rev/4567890abcde",
+            "revlinks": ["https://server/repo/rev/4567890abcde"],
             "desc": "Bug 43 - dolor sit amet",
         },
         {
             "author": "Anon Ymous",
-            "revlink": "https://server/repo/rev/567890abcdef",
+            "revlinks": ["https://server/repo/rev/567890abcdef"],
             "desc": "Bug 43 - consectetur adipiscing elit",
         },
         {
             "author": "Random Bystander",
-            "revlink": "https://server/repo/rev/67890abcdef0",
+            "revlinks": ["https://server/repo/rev/67890abcdef0"],
             "desc": "Bug 44 - Ut enim ad minim veniam",
         },
         {
             "author": "Other Bystander",
-            "revlink": "https://server/repo/rev/7890abcdef01",
+            "revlinks": ["https://server/repo/rev/7890abcdef01"],
             "desc": "Bug 45 - Excepteur sint occaecat cupidatat non proident",
         },
         {
             "author": "Sheriff",
-            "revlink": "https://server/repo/rev/890abcdef012",
+            "revlinks": ["https://server/repo/rev/890abcdef012"],
             "desc": "Merge branch into repo",
             "is_merge": True,
         },
         {
             "author": "Sheriff",
-            "revlink": "https://server/uplift-repo/rev/ec26c420eea4",
+            "revlinks": ["https://server/uplift-repo/rev/ec26c420eea4"],
             "desc": "Bug 46 - Excepteur sint occaecat cupidatat non proident a=someone",
+        },
+        {
+            "author": "Ann O'nymous",
+            "revlinks": [
+                "https://gitserver/user/repo/commit/ba0987654321",
+                "https://server/repo/rev/1234567890ab",
+            ],
+            "desc": "Bug 47 - Changed something on Git",
         },
     ]
 
@@ -329,7 +339,7 @@ class TestPulseDispatcher(unittest.TestCase):
         result = {
             42: [
                 {
-                    "revlink": "https://server/repo/rev/1234567890ab",
+                    "revlinks": ["https://server/repo/rev/1234567890ab"],
                     "desc": "Bug 42 - Changed something",
                     "is_backout": False,
                 }
@@ -340,7 +350,7 @@ class TestPulseDispatcher(unittest.TestCase):
         push["changesets"].append(self.CHANGESETS[1])
         result[42].append(
             {
-                "revlink": "https://server/repo/rev/234567890abc",
+                "revlinks": ["https://server/repo/rev/234567890abc"],
                 "desc": "Fixup for bug 42 - Changed something else",
                 "is_backout": False,
             }
@@ -350,17 +360,17 @@ class TestPulseDispatcher(unittest.TestCase):
         push["changesets"].extend(self.CHANGESETS[2:5])
         result[43] = [
             {
-                "revlink": "https://server/repo/rev/34567890abcd",
+                "revlinks": ["https://server/repo/rev/34567890abcd"],
                 "desc": "Bug 43 - Lorem ipsum",
                 "is_backout": False,
             },
             {
-                "revlink": "https://server/repo/rev/4567890abcde",
+                "revlinks": ["https://server/repo/rev/4567890abcde"],
                 "desc": "Bug 43 - dolor sit amet",
                 "is_backout": False,
             },
             {
-                "revlink": "https://server/repo/rev/567890abcdef",
+                "revlinks": ["https://server/repo/rev/567890abcdef"],
                 "desc": "Bug 43 - consectetur adipiscing elit",
                 "is_backout": False,
             },
@@ -370,16 +380,29 @@ class TestPulseDispatcher(unittest.TestCase):
         push["changesets"].append(
             {
                 "author": "Sheriff",
-                "revlink": "https://server/repo/rev/90abcdef0123",
+                "revlinks": ["https://server/repo/rev/90abcdef0123"],
                 "desc": "Backout bug 41 for bustage",
             }
         )
         result[41] = [
             {
-                "revlink": "https://server/repo/rev/90abcdef0123",
+                "revlinks": ["https://server/repo/rev/90abcdef0123"],
                 "desc": "Backout bug 41 for bustage",
                 "is_backout": True,
             },
+        ]
+        self.assertEqual(munge(push), result)
+
+        push["changesets"].append(self.CHANGESETS[9])
+        result[47] = [
+            {
+                "revlinks": [
+                    "https://gitserver/user/repo/commit/ba0987654321",
+                    "https://server/repo/rev/1234567890ab",
+                ],
+                "desc": "Bug 47 - Changed something on Git",
+                "is_backout": False,
+            }
         ]
         self.assertEqual(munge(push), result)
 
@@ -477,6 +500,25 @@ class TestPulseDispatcher(unittest.TestCase):
         self.assertEqual(bz.comments, comments)
 
         bz.clear()
+        push = {
+            "pushlog": "https://server/repo/pushloghtml?startID=1&endID=2",
+            "user": "foo@bar.com",
+            "changesets": [self.CHANGESETS[9]],
+        }
+        comments = {
+            47: [
+                {
+                    "text": "Pushed by foo@bar.com:\n"
+                    "https://gitserver/user/repo/commit/ba0987654321\n"
+                    "https://server/repo/rev/1234567890ab\n"
+                    "Changed something on Git"
+                }
+            ],
+        }
+        do_push(push)
+        self.assertEqual(bz.comments, comments)
+
+        bz.clear()
         push["changesets"].extend(self.CHANGESETS[2:5])
         comments[43] = [
             {
@@ -495,7 +537,7 @@ class TestPulseDispatcher(unittest.TestCase):
         push["changesets"].append(
             {
                 "author": "Sheriff",
-                "revlink": "https://server/repo/rev/90abcdef0123",
+                "revlinks": ["https://server/repo/rev/90abcdef0123"],
                 "desc": "Backout bug 41 for bustage",
             }
         )
@@ -560,7 +602,7 @@ class TestPulseDispatcher(unittest.TestCase):
         push = {
             "pushlog": "https://server/uplift-repo/pushloghtml?startID=1&endID=2",
             "user": "foo@bar.com",
-            "changesets": self.CHANGESETS[-1:],
+            "changesets": [self.CHANGESETS[8]],
         }
         comments = {
             46: [
@@ -579,7 +621,7 @@ class TestPulseDispatcher(unittest.TestCase):
                 list(
                     PulseDispatcher.bugzilla_summary(
                         {
-                            "revlink": "https://server/repo/rev/1234567890ab",
+                            "revlinks": ["https://server/repo/rev/1234567890ab"],
                             "desc": desc,
                         }
                     )
@@ -664,7 +706,7 @@ class TestPulseDispatcher(unittest.TestCase):
                 "changesets": [
                     {
                         "author": "Ann O'nymous",
-                        "revlink": "https://server/%s/rev/1234567890ab" % repo,
+                        "revlinks": ["https://server/%s/rev/1234567890ab" % repo],
                         "desc": "Bug 42 - Changed something%s" % approver,
                     }
                 ],
@@ -687,7 +729,7 @@ class TestPulseDispatcher(unittest.TestCase):
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repoa/rev/1234567890ab",
+                            "revlinks": ["https://server/repoa/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -707,7 +749,7 @@ class TestPulseDispatcher(unittest.TestCase):
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repob/rev/1234567890ab",
+                            "revlinks": ["https://server/repob/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -730,7 +772,7 @@ class TestPulseDispatcher(unittest.TestCase):
                         {
                             "desc": "Bug 42 - Changed something a=someone",
                             "is_backout": False,
-                            "revlink": "https://server/uplift-repo/rev/1234567890ab",
+                            "revlinks": ["https://server/uplift-repo/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -756,7 +798,7 @@ class TestPulseDispatcher(unittest.TestCase):
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repo/rev/1234567890ab",
+                            "revlinks": ["https://server/repo/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -776,7 +818,7 @@ class TestPulseDispatcher(unittest.TestCase):
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repoa/rev/1234567890ab",
+                            "revlinks": ["https://server/repoa/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -802,7 +844,7 @@ class TestPulseDispatcher(unittest.TestCase):
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repo/rev/1234567890ab",
+                            "revlinks": ["https://server/repo/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -822,7 +864,7 @@ class TestPulseDispatcher(unittest.TestCase):
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repoa/rev/1234567890ab",
+                            "revlinks": ["https://server/repoa/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -848,7 +890,7 @@ class TestPulseDispatcher(unittest.TestCase):
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repo/rev/1234567890ab",
+                            "revlinks": ["https://server/repo/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -868,7 +910,7 @@ class TestPulseDispatcher(unittest.TestCase):
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repoa/rev/1234567890ab",
+                            "revlinks": ["https://server/repoa/rev/1234567890ab"],
                         }
                     ],
                 }
