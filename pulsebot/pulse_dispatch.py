@@ -5,7 +5,6 @@
 import logging
 import os
 import re
-import sys
 import threading
 import time
 from urllib.parse import urlparse
@@ -25,26 +24,8 @@ from pulsebot.config import DispatchConfig
 logger = logging.getLogger(__name__)
 
 REVLINK_RE = re.compile("/rev/[^/]*$")
-
-
-# Stolen from pylib/mozautomation/mozautomation/commitparser.py from
-# https://hg.mozilla.org/hgcustom/version-control-tools
-BUG_RE = re.compile(
-    r"""# bug followed by any sequence of numbers, or
-        # a standalone sequence of numbers
-         (
-           (?:
-             bug |
-             b= |
-             # a sequence of 5+ numbers preceded by whitespace
-             (?=\b\#?\d{5,}) |
-             # numbers at the very beginning
-             ^(?=\d)
-           )
-           (?:\s*\#?)(\d+)(?=\b)
-         )""",
-    re.I | re.X,
-)
+APPROVE_RE = re.compile(" a=(.*)")
+BUG_RE = re.compile(r"""((?:bug|b=) (?:\s*\#?)(\d+)(?=\b))""", re.I | re.X)
 
 
 def parse_bugs(s):
@@ -61,11 +42,12 @@ class BugInfo(object):
         self.pusher = pusher
         self.leave_open = False
         self.changesets = []
+        self.uplift = False
 
     def add_changeset(self, cs):
         self.changesets.append(
             {
-                "revlink": cs["revlink"],
+                "revlinks": cs["revlinks"],
                 "desc": cs["desc"],
                 "is_backout": bool(BACKOUT_RE.match(cs["desc"])),
             }
@@ -86,19 +68,14 @@ class PulseDispatcher(object):
         self.backout_delay = 600
 
         if config.bugzilla_server and config.bugzilla_api_key:
-            self.bugzilla = Bugzilla(
-                config.bugzilla_server,
-                config.bugzilla_api_key
-            )
+            self.bugzilla = Bugzilla(config.bugzilla_server, config.bugzilla_api_key)
 
         if config.pulse_max_checkins:
             self.max_checkins = config.pulse_max_checkins
 
-        if self.config.bugzilla_branches:
+        if self.config.bugzilla_branches or self.config.uplift_branches:
             self.bugzilla_queue = Queue(42)
-            self.bugzilla_thread = threading.Thread(
-                target=self.bugzilla_reporter
-            )
+            self.bugzilla_thread = threading.Thread(target=self.bugzilla_reporter)
             self.bugzilla_thread.start()
 
     def change_reporter(self):
@@ -108,60 +85,22 @@ class PulseDispatcher(object):
     def report_one_push(self, push):
         url = urlparse(push["pushlog"])
         branch = os.path.dirname(url.path).strip("/")
-        logger.info(f'report_one_push: {url.netloc}{url.path} {branch}')
-        if branch in self.config.bugzilla_branches:
+        logger.info(f"report_one_push: {url.netloc}{url.path} {branch}")
+        if (
+            branch in self.config.bugzilla_branches
+            or branch in self.config.uplift_branches
+        ):
             for info in self.munge_for_bugzilla(push):
                 if branch in self.config.bugzilla_leave_open:
                     info.leave_open = True
+
+                # Find out changeset is approved and branch is uplift
+                for cs in info.changesets:
+                    match = APPROVE_RE.search(cs["desc"])
+                    if match and branch in self.config.uplift_branches:
+                        info.uplift = True
+
                 self.bugzilla_queue.put(info)
-
-    @staticmethod
-    def create_messages(push, max_checkins=sys.maxsize, max_bugs=5):
-        max_bugs = max(1, max_bugs)
-        changesets = push["changesets"]
-        group = ""
-        group_bugs = []
-
-        # Kind of gross
-        last_desc = changesets[-1]["desc"] if changesets else ""
-        merge = changesets[-1].get("is_merge") if changesets else False
-
-        group_changesets = merge or len(changesets) > max_checkins
-
-        if not merge:
-            for cs in changesets:
-                revlink = cs["revlink"]
-                desc = cs["desc"]
-
-                if group_changesets:
-                    bugs = parse_bugs(desc)
-                    if bugs and bugs[0] not in group_bugs:
-                        logger.info(f'bug found: {bugs[0]}')
-                        group_bugs.append(bugs[0])
-                else:
-                    author = cs["author"]
-                    yield "%s - %s - %s" % (revlink, author, desc)
-
-        if group_changesets:
-            group = "%s - %d changesets" % (push["pushlog"], len(changesets))
-
-        if merge:
-            group += " - %s" % last_desc
-
-        if group:
-            if group_bugs and not merge:
-                group += " (bug%s %s%s)" % (
-                    "s" if len(group_bugs) > 1 else "",
-                    ", ".join(str(b) for b in group_bugs[:max_bugs]),
-                    " and %d other bug%s"
-                    % (
-                        len(group_bugs) - max_bugs,
-                        "s" if len(group_bugs) > max_bugs + 1 else "",
-                    )
-                    if len(group_bugs) > max_bugs
-                    else "",
-                )
-            yield group
 
     @staticmethod
     def munge_for_bugzilla(push):
@@ -172,7 +111,7 @@ class PulseDispatcher(object):
                 continue
             bugs = parse_bugs(cs["desc"])
             if bugs:
-                logger.info(f'bug found: {bugs[0]}')
+                logger.info(f"bug found: {bugs[0]}")
                 if bugs[0] not in info_for_bugs:
                     info_for_bugs[bugs[0]] = BugInfo(bugs[0], push["user"])
                 info_for_bugs[bugs[0]].add_changeset(cs)
@@ -182,28 +121,27 @@ class PulseDispatcher(object):
 
     @staticmethod
     def bugzilla_summary(cs):
-        yield cs["revlink"]
+        for rev_link in cs["revlinks"]:
+            yield rev_link
 
         desc = cs["desc"]
-        matches = [
-            m for m in BUG_RE.finditer(desc) if int(m.group(2)) < 100000000
-        ]
+        matches = [m for m in BUG_RE.finditer(desc) if int(m.group(2)) < 100000000]
 
         match = matches[0]
         if match.start() == 0:
-            desc = desc[match.end():].lstrip(" \t-,.:")
+            desc = desc[match.end() :].lstrip(" \t-,.:")
         else:
             backout = BACKOUT_RE.match(desc)
-            if backout and not desc[backout.end(): match.start()].strip():
-                desc = desc[: backout.end()] + desc[match.end():]
+            if backout and not desc[backout.end() : match.start()].strip():
+                desc = desc[: backout.end()] + desc[match.end() :]
             elif (
                 desc[match.start() - 1] == "("
-                and desc[match.end(): match.end() + 1] == ")"
+                and desc[match.end() : match.end() + 1] == ")"
             ):
                 desc = (
                     desc[: match.start() - 1].rstrip()
                     + " "
-                    + desc[match.end() + 1:].lstrip()
+                    + desc[match.end() + 1 :].lstrip()
                 )
 
         yield desc
@@ -231,7 +169,7 @@ class PulseDispatcher(object):
                 continue
 
             try:
-                comments = "\n".join(self.bugzilla.get_comments(info.bug))
+                comments = self.bugzilla.get_comments(info.bug)
             except BugzillaError:
                 # Don't do anything on errors, such as "You are not authorized
                 # to access bug #xxxxx".
@@ -239,18 +177,27 @@ class PulseDispatcher(object):
 
             cs_to_write = []
             for cs_info in info:
-                url = cs_info["revlink"]
+                hg_url = next(u for u in cs_info["revlinks"] if "/rev/" in u)
                 # Only write about a changeset if it's never been mentioned
                 # at all. This makes us not emit changesets that e.g. land
                 # on mozilla-inbound when they were mentioned when landing
                 # on mozilla-central.
-                if url[-12:] not in comments:
+                if not any(
+                    hg_url[-12:] in comment.get("text", "") for comment in comments
+                ):
                     cs_to_write.append(cs_info)
 
-            if cs_to_write:
-                is_backout = all(cs["is_backout"] for cs in cs_to_write)
+            if not cs_to_write:
+                continue
 
-                def comment():
+            is_backout = all(cs["is_backout"] for cs in cs_to_write)
+
+            def comment():
+                if info.uplift:
+                    for cs in cs_to_write:
+                        for rev_link in cs["revlinks"]:
+                            yield rev_link
+                else:
                     if is_backout:
                         if info.pusher:
                             yield "Backout by %s:" % info.pusher
@@ -262,20 +209,25 @@ class PulseDispatcher(object):
                         for line in self.bugzilla_summary(cs):
                             yield line
 
-                try:
-                    fields = ("whiteboard", "keywords", "status")
-                    values = self.bugzilla.get_fields(info.bug, fields)
-                    # Delay comments for backouts and checkin-needed in
-                    # whiteboard
-                    delay_comment = not delayed and (
-                        is_backout or "checkin-needed" in values.get("whiteboard", "")
-                    )
-                    if delay_comment:
-                        delayed_comments.append(
-                            (time.time() + self.backout_delay, info)
+            try:
+                fields = ("whiteboard", "keywords", "status")
+                values = self.bugzilla.get_fields(info.bug, fields)
+                # Delay comments for backouts and checkin-needed in
+                # whiteboard
+                delay_comment = not delayed and (
+                    is_backout or "checkin-needed" in values.get("whiteboard", "")
+                )
+                if delay_comment:
+                    delayed_comments.append((time.time() + self.backout_delay, info))
+                else:
+                    message = "\n".join(comment())
+
+                    # Uplift comments just need comment + uplift tag
+                    if info.uplift:
+                        self.bugzilla.post_comment(
+                            info.bug, text=message, comment_tags=["uplift"]
                         )
                     else:
-                        message = "\n".join(comment())
                         kwargs = {}
                         remove_keywords = [
                             kw
@@ -298,14 +250,14 @@ class PulseDispatcher(object):
                             kwargs["comment"] = {"body": message}
                             self.bugzilla.update_bug(info.bug, **kwargs)
                         else:
-                            self.bugzilla.post_comment(info.bug, message)
-                except Exception:
-                    logger.exception(f"Failed to send comment to bug {info.bug}")
+                            self.bugzilla.post_comment(info.bug, text=message)
+            except Exception:
+                logger.exception(f"Failed to send comment to bug {info.bug}")
 
     def shutdown(self):
         self.hgpushes.shutdown()
         self.shutting_down = True
-        if self.config.bugzilla_branches:
+        if self.config.bugzilla_branches or self.config.uplift_branches:
             self.bugzilla_thread.join()
 
 
@@ -313,148 +265,70 @@ class TestPulseDispatcher(unittest.TestCase):
     CHANGESETS = [
         {
             "author": "Ann O'nymous",
-            "revlink": "https://server/repo/rev/1234567890ab",
+            "revlinks": ["https://server/repo/rev/1234567890ab"],
             "desc": "Bug 42 - Changed something",
         },
         {
             "author": "Ann O'nymous",
-            "revlink": "https://server/repo/rev/234567890abc",
+            "revlinks": ["https://server/repo/rev/234567890abc"],
             "desc": "Fixup for bug 42 - Changed something else",
         },
         {
             "author": "Anon Ymous",
-            "revlink": "https://server/repo/rev/34567890abcd",
+            "revlinks": ["https://server/repo/rev/34567890abcd"],
             "desc": "Bug 43 - Lorem ipsum",
         },
         {
             "author": "Anon Ymous",
-            "revlink": "https://server/repo/rev/4567890abcde",
+            "revlinks": ["https://server/repo/rev/4567890abcde"],
             "desc": "Bug 43 - dolor sit amet",
         },
         {
             "author": "Anon Ymous",
-            "revlink": "https://server/repo/rev/567890abcdef",
+            "revlinks": ["https://server/repo/rev/567890abcdef"],
             "desc": "Bug 43 - consectetur adipiscing elit",
         },
         {
             "author": "Random Bystander",
-            "revlink": "https://server/repo/rev/67890abcdef0",
+            "revlinks": ["https://server/repo/rev/67890abcdef0"],
             "desc": "Bug 44 - Ut enim ad minim veniam",
         },
         {
             "author": "Other Bystander",
-            "revlink": "https://server/repo/rev/7890abcdef01",
+            "revlinks": ["https://server/repo/rev/7890abcdef01"],
             "desc": "Bug 45 - Excepteur sint occaecat cupidatat non proident",
         },
         {
             "author": "Sheriff",
-            "revlink": "https://server/repo/rev/890abcdef012",
+            "revlinks": ["https://server/repo/rev/890abcdef012"],
             "desc": "Merge branch into repo",
             "is_merge": True,
         },
+        {
+            "author": "Sheriff",
+            "revlinks": ["https://server/uplift-repo/rev/ec26c420eea4"],
+            "desc": "Bug 46 - Excepteur sint occaecat cupidatat non proident a=someone",
+        },
+        {
+            "author": "Ann O'nymous",
+            "revlinks": [
+                "https://gitserver/user/repo/commit/ba0987654321",
+                "https://server/repo/rev/1234567890ab",
+            ],
+            "desc": "Bug 47 - Changed something on Git",
+        },
     ]
 
-    def test_create_messages(self):
-        push = {
-            "pushlog": "https://server/repo/pushloghtml?startID=1&endID=2",
-            "changesets": self.CHANGESETS[:1],
-        }
-        result = [
-            "https://server/repo/rev/1234567890ab - Ann O'nymous - "
-            "Bug 42 - Changed something",
-        ]
-        self.assertEqual(list(PulseDispatcher.create_messages(push)), result)
-
-        push["changesets"].append(self.CHANGESETS[1])
-        result.append(
-            "https://server/repo/rev/234567890abc - Ann O'nymous - "
-            "Fixup for bug 42 - Changed something else",
-        )
-        self.assertEqual(list(PulseDispatcher.create_messages(push)), result)
-
-        push["changesets"].extend(self.CHANGESETS[2:5])
-        result.extend(
-            (
-                "https://server/repo/rev/34567890abcd - Anon Ymous - "
-                "Bug 43 - Lorem ipsum",
-                "https://server/repo/rev/4567890abcde - Anon Ymous - "
-                "Bug 43 - dolor sit amet",
-                "https://server/repo/rev/567890abcdef - Anon Ymous - "
-                "Bug 43 - consectetur adipiscing elit",
-            )
-        )
-        self.assertEqual(list(PulseDispatcher.create_messages(push)), result)
-
-        self.assertEqual(list(PulseDispatcher.create_messages(push, 5)), result)
-
-        push["changesets"].append(self.CHANGESETS[5])
-        self.assertEqual(
-            list(PulseDispatcher.create_messages(push, 5)),
-            [
-                "https://server/repo/pushloghtml?startID=1&endID=2 - 6 changesets "
-                "(bugs 42, 43, 44)"
-            ],
-        )
-        self.assertEqual(
-            list(PulseDispatcher.create_messages(push, 5, 1)),
-            [
-                "https://server/repo/pushloghtml?startID=1&endID=2 - 6 changesets "
-                "(bugs 42 and 2 other bugs)"
-            ],
-        )
-        self.assertEqual(
-            list(PulseDispatcher.create_messages(push, 5, 2)),
-            [
-                "https://server/repo/pushloghtml?startID=1&endID=2 - 6 changesets "
-                "(bugs 42, 43 and 1 other bug)"
-            ],
-        )
-
-        push["changesets"].append(self.CHANGESETS[6])
-        self.assertEqual(
-            list(PulseDispatcher.create_messages(push, 5)),
-            [
-                "https://server/repo/pushloghtml?startID=1&endID=2 - 7 changesets "
-                "(bugs 42, 43, 44, 45)"
-            ],
-        )
-        self.assertEqual(
-            list(PulseDispatcher.create_messages(push, 5, 1)),
-            [
-                "https://server/repo/pushloghtml?startID=1&endID=2 - 7 changesets "
-                "(bugs 42 and 3 other bugs)"
-            ],
-        )
-        self.assertEqual(
-            list(PulseDispatcher.create_messages(push, 5, 2)),
-            [
-                "https://server/repo/pushloghtml?startID=1&endID=2 - 7 changesets "
-                "(bugs 42, 43 and 2 other bugs)"
-            ],
-        )
-
-        push["changesets"].append(self.CHANGESETS[7])
-        self.assertEqual(
-            list(PulseDispatcher.create_messages(push, 5)),
-            [
-                "https://server/repo/pushloghtml?startID=1&endID=2 - 8 changesets "
-                "- Merge branch into repo"
-            ],
-        )
-        # Merges are always grouped
-        self.assertEqual(
-            list(PulseDispatcher.create_messages(push)),
-            [
-                "https://server/repo/pushloghtml?startID=1&endID=2 - 8 changesets "
-                "- Merge branch into repo"
-            ],
-        )
-
     def test_munge_for_bugzilla(self):
+        class TestPulseDispatcher(PulseDispatcher):
+            def __init__(self, push):
+                self.hgpushes = [push]
+                self.bugzilla = []
+
         def munge(push):
+            dispatcher = TestPulseDispatcher(push)
             return {
-                info.bug: list(info)
-                for info in PulseDispatcher.munge_for_bugzilla(push)
+                info.bug: list(info) for info in dispatcher.munge_for_bugzilla(push)
             }
 
         push = {
@@ -465,7 +339,7 @@ class TestPulseDispatcher(unittest.TestCase):
         result = {
             42: [
                 {
-                    "revlink": "https://server/repo/rev/1234567890ab",
+                    "revlinks": ["https://server/repo/rev/1234567890ab"],
                     "desc": "Bug 42 - Changed something",
                     "is_backout": False,
                 }
@@ -476,7 +350,7 @@ class TestPulseDispatcher(unittest.TestCase):
         push["changesets"].append(self.CHANGESETS[1])
         result[42].append(
             {
-                "revlink": "https://server/repo/rev/234567890abc",
+                "revlinks": ["https://server/repo/rev/234567890abc"],
                 "desc": "Fixup for bug 42 - Changed something else",
                 "is_backout": False,
             }
@@ -486,17 +360,17 @@ class TestPulseDispatcher(unittest.TestCase):
         push["changesets"].extend(self.CHANGESETS[2:5])
         result[43] = [
             {
-                "revlink": "https://server/repo/rev/34567890abcd",
+                "revlinks": ["https://server/repo/rev/34567890abcd"],
                 "desc": "Bug 43 - Lorem ipsum",
                 "is_backout": False,
             },
             {
-                "revlink": "https://server/repo/rev/4567890abcde",
+                "revlinks": ["https://server/repo/rev/4567890abcde"],
                 "desc": "Bug 43 - dolor sit amet",
                 "is_backout": False,
             },
             {
-                "revlink": "https://server/repo/rev/567890abcdef",
+                "revlinks": ["https://server/repo/rev/567890abcdef"],
                 "desc": "Bug 43 - consectetur adipiscing elit",
                 "is_backout": False,
             },
@@ -506,20 +380,36 @@ class TestPulseDispatcher(unittest.TestCase):
         push["changesets"].append(
             {
                 "author": "Sheriff",
-                "revlink": "https://server/repo/rev/90abcdef0123",
+                "revlinks": ["https://server/repo/rev/90abcdef0123"],
                 "desc": "Backout bug 41 for bustage",
             }
         )
         result[41] = [
             {
-                "revlink": "https://server/repo/rev/90abcdef0123",
+                "revlinks": ["https://server/repo/rev/90abcdef0123"],
                 "desc": "Backout bug 41 for bustage",
                 "is_backout": True,
             },
         ]
         self.assertEqual(munge(push), result)
 
+        push["changesets"].append(self.CHANGESETS[9])
+        result[47] = [
+            {
+                "revlinks": [
+                    "https://gitserver/user/repo/commit/ba0987654321",
+                    "https://server/repo/rev/1234567890ab",
+                ],
+                "desc": "Bug 47 - Changed something on Git",
+                "is_backout": False,
+            }
+        ]
+        self.assertEqual(munge(push), result)
+
     def test_bugzilla_reporter(self):
+        class Dummy(object):
+            pass
+
         class TestBugzilla(object):
             def __init__(self):
                 self.comments = defaultdict(list)
@@ -537,15 +427,18 @@ class TestPulseDispatcher(unittest.TestCase):
                         result[field] = data
                 return result
 
-            def post_comment(self, bug, message):
-                self.comments[bug].append(message)
+            def post_comment(self, bug, **kwargs):
+                comment = {"text": kwargs.get("text", "")}
+                if "comment_tags" in kwargs:
+                    comment["comment_tags"] = kwargs.get("comment_tags", [])
+                self.comments[bug].append(comment)
 
             def update_bug(self, bug, **kwargs):
                 # TODO: Handle keywords and whiteboard and add a test for the
                 # checkin-needed removal.
                 for k, v in kwargs.items():
                     if k == "comment":
-                        self.post_comment(bug, v["body"])
+                        self.post_comment(bug, text=v["body"])
                     else:
                         self.data[bug][k] = v
 
@@ -556,6 +449,10 @@ class TestPulseDispatcher(unittest.TestCase):
 
         class TestPulseDispatcher(PulseDispatcher):
             def __init__(self):
+                self.config = Dummy()
+                self.config.bugzilla_branches = ["repo"]
+                self.config.bugzilla_leave_open = ["leave-open"]
+                self.config.uplift_branches = ["uplift-repo"]
                 self.shutting_down = False
                 self.backout_delay = 0
                 self.bugzilla = bz
@@ -569,14 +466,11 @@ class TestPulseDispatcher(unittest.TestCase):
 
         def do_push(push, leave_open=False):
             dispatcher = TestPulseDispatcher()
-            try:
-                for info in dispatcher.munge_for_bugzilla(push):
-                    if leave_open:
-                        info.leave_open = leave_open
-                    dispatcher.bugzilla_queue.put(info)
-            finally:
-                dispatcher.bugzilla_queue.put(None)
-                dispatcher.shutdown()
+            if leave_open:
+                push["pushlog"] = re.sub("repo", "leave-open", push["pushlog"])
+            dispatcher.report_one_push(push)
+            dispatcher.bugzilla_queue.put(None)
+            dispatcher.shutdown()
 
         push = {
             "pushlog": "https://server/repo/pushloghtml?startID=1&endID=2",
@@ -585,9 +479,11 @@ class TestPulseDispatcher(unittest.TestCase):
         }
         comments = {
             42: [
-                "Pushed by foo@bar.com:\n"
-                "https://server/repo/rev/1234567890ab\n"
-                "Changed something"
+                {
+                    "text": "Pushed by foo@bar.com:\n"
+                    "https://server/repo/rev/1234567890ab\n"
+                    "Changed something"
+                }
             ],
         }
         do_push(push)
@@ -595,7 +491,7 @@ class TestPulseDispatcher(unittest.TestCase):
 
         bz.clear()
         push["changesets"].append(self.CHANGESETS[1])
-        comments[42][0] += (
+        comments[42][0]["text"] += (
             "\n"
             "https://server/repo/rev/234567890abc\n"
             "Fixup for bug 42 - Changed something else"
@@ -604,30 +500,53 @@ class TestPulseDispatcher(unittest.TestCase):
         self.assertEqual(bz.comments, comments)
 
         bz.clear()
-        push["changesets"].extend(self.CHANGESETS[2:5])
-        comments[43] = [
-            "Pushed by foo@bar.com:\n"
-            "https://server/repo/rev/34567890abcd\n"
-            "Lorem ipsum\n"
-            "https://server/repo/rev/4567890abcde\n"
-            "dolor sit amet\n"
-            "https://server/repo/rev/567890abcdef\n"
-            "consectetur adipiscing elit"
-        ]
+        push = {
+            "pushlog": "https://server/repo/pushloghtml?startID=1&endID=2",
+            "user": "foo@bar.com",
+            "changesets": [self.CHANGESETS[9]],
+        }
+        comments = {
+            47: [
+                {
+                    "text": "Pushed by foo@bar.com:\n"
+                    "https://gitserver/user/repo/commit/ba0987654321\n"
+                    "https://server/repo/rev/1234567890ab\n"
+                    "Changed something on Git"
+                }
+            ],
+        }
         do_push(push)
         self.assertEqual(bz.comments, comments)
+
+        bz.clear()
+        push["changesets"].extend(self.CHANGESETS[2:5])
+        comments[43] = [
+            {
+                "text": "Pushed by foo@bar.com:\n"
+                "https://server/repo/rev/34567890abcd\n"
+                "Lorem ipsum\n"
+                "https://server/repo/rev/4567890abcde\n"
+                "dolor sit amet\n"
+                "https://server/repo/rev/567890abcdef\n"
+                "consectetur adipiscing elit"
+            }
+        ]
+        do_push(push)
+        self.assertDictEqual(bz.comments, comments)
 
         push["changesets"].append(
             {
                 "author": "Sheriff",
-                "revlink": "https://server/repo/rev/90abcdef0123",
+                "revlinks": ["https://server/repo/rev/90abcdef0123"],
                 "desc": "Backout bug 41 for bustage",
             }
         )
         comments[41] = [
-            "Backout by foo@bar.com:\n"
-            "https://server/repo/rev/90abcdef0123\n"
-            "Backout for bustage",
+            {
+                "text": "Backout by foo@bar.com:\n"
+                "https://server/repo/rev/90abcdef0123\n"
+                "Backout for bustage"
+            }
         ]
         do_push(push)
         self.assertEqual(bz.comments, comments)
@@ -635,7 +554,7 @@ class TestPulseDispatcher(unittest.TestCase):
         bz.clear()
         # If there is already a comment for the landed changeset, don't
         # add one ourselves.
-        bz.post_comment(42, "Landed: https://server/repo/rev/1234567890ab")
+        bz.post_comment(42, text="Landed: https://server/repo/rev/1234567890ab")
         comments = {42: bz.get_comments(42)}
         push["changesets"] = self.CHANGESETS[:1]
         do_push(push)
@@ -643,8 +562,10 @@ class TestPulseDispatcher(unittest.TestCase):
 
         push["changesets"].append(self.CHANGESETS[1])
         comments[42].append(
-            "https://server/repo/rev/234567890abc\n"
-            "Fixup for bug 42 - Changed something else"
+            {
+                "text": "https://server/repo/rev/234567890abc\n"
+                "Fixup for bug 42 - Changed something else"
+            }
         )
         do_push(push)
         self.assertEqual(bz.comments, comments)
@@ -676,13 +597,31 @@ class TestPulseDispatcher(unittest.TestCase):
         do_push(push)
         self.assertEqual(bz.data, {})
 
+        # Test for uplift specific comment
+        bz.clear()
+        push = {
+            "pushlog": "https://server/uplift-repo/pushloghtml?startID=1&endID=2",
+            "user": "foo@bar.com",
+            "changesets": [self.CHANGESETS[8]],
+        }
+        comments = {
+            46: [
+                {
+                    "text": "https://server/uplift-repo/rev/ec26c420eea4",
+                    "comment_tags": ["uplift"],
+                }
+            ],
+        }
+        do_push(push)
+        self.assertEqual(bz.comments, comments)
+
     def test_bugzilla_summary(self):
         def summary_equals(desc, summary):
             self.assertEqual(
                 list(
                     PulseDispatcher.bugzilla_summary(
                         {
-                            "revlink": "https://server/repo/rev/1234567890ab",
+                            "revlinks": ["https://server/repo/rev/1234567890ab"],
                             "desc": desc,
                         }
                     )
@@ -740,10 +679,11 @@ class TestPulseDispatcher(unittest.TestCase):
         class TestPulseDispatcher(PulseDispatcher):
             def __init__(self, bugzilla_branches, push):
                 self.max_checkins = 10
-                bugzilla_branches, bugzilla_leave_open = bugzilla_branches
+                bugzilla_branches, bugzilla_leave_open, uplift = bugzilla_branches
                 self.config = Dummy()
                 self.config.bugzilla_branches = bugzilla_branches
                 self.config.bugzilla_leave_open = bugzilla_leave_open
+                self.config.uplift_branches = uplift
                 self.hgpushes = [push]
                 self.bugzilla = []
                 self.change_reporter()
@@ -757,20 +697,22 @@ class TestPulseDispatcher(unittest.TestCase):
 
                 return FakeQueue()
 
-        def push(repo):
+        def push(repo, approver=""):
+            if approver:
+                approver = " a=%s" % approver
             return {
                 "pushlog": "https://server/%s/pushloghtml?startID=1&endID=2" % repo,
                 "user": "foo@bar.com",
                 "changesets": [
                     {
                         "author": "Ann O'nymous",
-                        "revlink": "https://server/%s/rev/1234567890ab" % repo,
-                        "desc": "Bug 42 - Changed something",
+                        "revlinks": ["https://server/%s/rev/1234567890ab" % repo],
+                        "desc": "Bug 42 - Changed something%s" % approver,
                     }
                 ],
             }
 
-        bugzilla_branches = ["repoa", "repob"], {}
+        bugzilla_branches = ["repoa", "repob"], {}, ["uplift-repo"]
         test = TestPulseDispatcher(bugzilla_branches, push("repo"))
         self.assertEqual(test.bugzilla, [])
 
@@ -782,11 +724,12 @@ class TestPulseDispatcher(unittest.TestCase):
                     "bug": 42,
                     "pusher": "foo@bar.com",
                     "leave_open": False,
+                    "uplift": False,
                     "changesets": [
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repoa/rev/1234567890ab",
+                            "revlinks": ["https://server/repoa/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -801,11 +744,35 @@ class TestPulseDispatcher(unittest.TestCase):
                     "bug": 42,
                     "pusher": "foo@bar.com",
                     "leave_open": False,
+                    "uplift": False,
                     "changesets": [
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repob/rev/1234567890ab",
+                            "revlinks": ["https://server/repob/rev/1234567890ab"],
+                        }
+                    ],
+                }
+            ],
+        )
+
+        # Test for uplift comment support
+        test = TestPulseDispatcher(
+            bugzilla_branches, push("uplift-repo", approver="someone")
+        )
+        self.assertEqual(
+            test.bugzilla,
+            [
+                {
+                    "bug": 42,
+                    "pusher": "foo@bar.com",
+                    "leave_open": False,
+                    "uplift": True,
+                    "changesets": [
+                        {
+                            "desc": "Bug 42 - Changed something a=someone",
+                            "is_backout": False,
+                            "revlinks": ["https://server/uplift-repo/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -817,7 +784,7 @@ class TestPulseDispatcher(unittest.TestCase):
 
         bugzilla_branches = DispatchConfig()
         bugzilla_branches.add("repo*")
-        bugzilla_branches = bugzilla_branches, {}
+        bugzilla_branches = bugzilla_branches, {}, ["uplift-repo"]
         test = TestPulseDispatcher(bugzilla_branches, push("repo"))
         self.assertEqual(
             test.bugzilla,
@@ -826,11 +793,12 @@ class TestPulseDispatcher(unittest.TestCase):
                     "bug": 42,
                     "pusher": "foo@bar.com",
                     "leave_open": False,
+                    "uplift": False,
                     "changesets": [
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repo/rev/1234567890ab",
+                            "revlinks": ["https://server/repo/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -845,11 +813,12 @@ class TestPulseDispatcher(unittest.TestCase):
                     "bug": 42,
                     "pusher": "foo@bar.com",
                     "leave_open": False,
+                    "uplift": False,
                     "changesets": [
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repoa/rev/1234567890ab",
+                            "revlinks": ["https://server/repoa/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -861,7 +830,7 @@ class TestPulseDispatcher(unittest.TestCase):
 
         bugzilla_branches = DispatchConfig()
         bugzilla_branches.add("repo*")
-        bugzilla_branches = bugzilla_branches, {"repoa"}
+        bugzilla_branches = bugzilla_branches, {"repoa"}, ["uplift-repo"]
         test = TestPulseDispatcher(bugzilla_branches, push("repo"))
         self.assertEqual(
             test.bugzilla,
@@ -870,11 +839,12 @@ class TestPulseDispatcher(unittest.TestCase):
                     "bug": 42,
                     "pusher": "foo@bar.com",
                     "leave_open": False,
+                    "uplift": False,
                     "changesets": [
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repo/rev/1234567890ab",
+                            "revlinks": ["https://server/repo/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -889,11 +859,12 @@ class TestPulseDispatcher(unittest.TestCase):
                     "bug": 42,
                     "pusher": "foo@bar.com",
                     "leave_open": True,
+                    "uplift": False,
                     "changesets": [
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repoa/rev/1234567890ab",
+                            "revlinks": ["https://server/repoa/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -905,7 +876,7 @@ class TestPulseDispatcher(unittest.TestCase):
 
         bugzilla_branches = DispatchConfig()
         bugzilla_branches.add("repo*")
-        bugzilla_branches = bugzilla_branches, bugzilla_branches
+        bugzilla_branches = bugzilla_branches, bugzilla_branches, bugzilla_branches
         test = TestPulseDispatcher(bugzilla_branches, push("repo"))
         self.assertEqual(
             test.bugzilla,
@@ -914,11 +885,12 @@ class TestPulseDispatcher(unittest.TestCase):
                     "bug": 42,
                     "pusher": "foo@bar.com",
                     "leave_open": True,
+                    "uplift": False,
                     "changesets": [
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repo/rev/1234567890ab",
+                            "revlinks": ["https://server/repo/rev/1234567890ab"],
                         }
                     ],
                 }
@@ -933,11 +905,12 @@ class TestPulseDispatcher(unittest.TestCase):
                     "bug": 42,
                     "pusher": "foo@bar.com",
                     "leave_open": True,
+                    "uplift": False,
                     "changesets": [
                         {
                             "desc": "Bug 42 - Changed something",
                             "is_backout": False,
-                            "revlink": "https://server/repoa/rev/1234567890ab",
+                            "revlinks": ["https://server/repoa/rev/1234567890ab"],
                         }
                     ],
                 }

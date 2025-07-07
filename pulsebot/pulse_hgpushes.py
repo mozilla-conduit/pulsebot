@@ -5,10 +5,14 @@
 
 from __future__ import unicode_literals
 
+from urllib.parse import urlparse
+
 import requests
 import traceback
 import unittest
 from collections import OrderedDict
+
+from pulsebot import config
 from pulsebot.pulse import PulseListener
 import logging
 
@@ -25,14 +29,15 @@ class PulseHgPushes(PulseListener):
             "#",
             config.pulse_applabel if config.pulse_applabel else None,
         )
+        self.github_repos = config.github_repos
 
     def __iter__(self):
         for message in super(PulseHgPushes, self).__iter__():
-            for push in self.get_pushes_info(message):
+            for push in self.get_pushes_info(message, self.github_repos):
                 yield push
 
     @staticmethod
-    def get_pushes_info(pulse_message):
+    def get_pushes_info(pulse_message, github_repos):
         # Sanity checks
         logger.info("get_pushes_info")
         try:
@@ -50,7 +55,7 @@ class PulseHgPushes(PulseListener):
                 continue
             logger.info(f"get_push_info_from: {push_url}")
             try:
-                for data in PulseHgPushes.get_push_info_from(push_url):
+                for data in PulseHgPushes.get_push_info_from(push_url, github_repos):
                     yield data
             except Exception:
                 logger.exception(f"Failure on {push_url}")
@@ -60,8 +65,15 @@ class PulseHgPushes(PulseListener):
                 continue
 
     @staticmethod
-    def get_push_info_from(push_url):
-        repo = push_url[: push_url.rindex("/")]
+    def get_push_info_from(push_url, github_repos):
+        hg_repo = push_url[: push_url.rindex("/")]
+
+        gh_repo = None
+        url = urlparse(hg_repo)
+        gh_repo_names = github_repos.get(url.path.lstrip("/"))
+        if gh_repo_names:
+            gh_repo = f"https://github.com/{next(iter(gh_repo_names))}"
+
         r = requests.get(push_url)
         if r.status_code != requests.codes.ok:
             # If we were not successful, try again once.
@@ -77,19 +89,20 @@ class PulseHgPushes(PulseListener):
 
         for id, d in data.get("pushes", {}).items():
             id = int(id)
-            push_data = {
-                "pushlog": "%s/pushloghtml?startID=%d&endID=%d" % (repo, id - 1, id),
-                "user": d.get("user"),
-                "changesets": [],
-            }
+            push_data = dict(
+                pushlog="%s/pushloghtml?startID=%d&endID=%d" % (hg_repo, id - 1, id),
+                user=d.get("user"),
+                changesets=[],
+            )
 
-            for cs in d.get("changesets", ()):
-                short_node = cs["node"][:12]
-                revlink = "%s/rev/%s" % (repo, short_node)
+            for i, cs in enumerate(d.get("changesets", ())):
+                revlinks = [f"{hg_repo}/rev/{cs['node'][:12]}"]
+                if cs["git_node"] and gh_repo:
+                    revlinks.insert(0, f"{gh_repo}/commit/{cs['git_node'][:12]}")
 
                 desc = [line.strip() for line in cs["desc"].splitlines()]
                 data = {
-                    "revlink": revlink,
+                    "revlinks": revlinks,
                     "desc": desc[0].strip(),
                     "author": cs["author"].split(" <")[0].strip(),
                 }
@@ -108,110 +121,57 @@ class TestPushesInfo(unittest.TestCase):
         # Not ideal: this relies on actual live data.
         results = [
             {
-                "pushlog": "https://hg.mozilla.org/integration/mozilla-inbound/"
-                "pushloghtml?startID=5&endID=6",
-                "user": "eakhgari@mozilla.com",
                 "changesets": [
                     {
-                        "author": "Rafael Ávila de Espíndola",
-                        "revlink": "https://hg.mozilla.org/integration/mozilla-inbound/"
-                        "rev/685f5ae6e7de",
-                        "desc": "Bug 657653. Check for libstdc++ versions in "
-                        "stdc++compat.cpp; r=ted,glandium",
-                    }
+                        "author": "James Teh",
+                        "desc": "Bug 1857116 part 1: Reinstate building of the IAccessible2 proxy dll. r=morgan",
+                        "revlinks": [
+                            "https://github.com/mozilla-firefox/firefox/commit/8dab41f4c61a",
+                            "https://hg.mozilla.org/integration/autoland/rev/0453d4a52ea2",
+                        ],
+                    },
+                    {
+                        "author": "James Teh",
+                        "desc": "Bug 1857116 part 2: Register the IAccessible2 proxy dll for automated tests on CI. "
+                        "r=morgan,jmaher",
+                        "revlinks": [
+                            "https://github.com/mozilla-firefox/firefox/commit/f609a8a873b6",
+                            "https://hg.mozilla.org/integration/autoland/rev/3c559d1189a7",
+                        ],
+                    },
+                    {
+                        "author": "James Teh",
+                        "desc": "Bug 1857116 part 3: Enable browser_textSelectionContainer.js on CI. Tag it as "
+                        "os_integration so it is verified when upgrading Windows on CI. r=jmaher",
+                        "revlinks": [
+                            "https://github.com/mozilla-firefox/firefox/commit/f0e68fd22dc6",
+                            "https://hg.mozilla.org/integration/autoland/rev/b72610598081",
+                        ],
+                    },
                 ],
+                "pushlog": "https://hg.mozilla.org/integration/autoland/pushloghtml?startID=232563&endID=232564",
+                "user": "jteh@mozilla.com",
             },
             {
-                "pushlog": "https://hg.mozilla.org/integration/mozilla-inbound/"
-                "pushloghtml?startID=6&endID=7",
-                "user": "rocallahan@mozilla.com",
                 "changesets": [
                     {
-                        "author": "Robert O'Callahan",
-                        "revlink": "https://hg.mozilla.org/integration/mozilla-inbound/"
-                        "rev/63c8f645cc1c",
-                        "desc": "Bug 661471. Part 6.1: Expose "
-                        "cairo_win32_get_system_text_quality. r=jfkthame",
-                    },
-                    {
-                        "author": "Robert O'Callahan",
-                        "revlink": "https://hg.mozilla.org/integration/mozilla-inbound/"
-                        "rev/3eb99af46b93",
-                        "desc": "Bug 661471. Part 6.2: Handle dynamic changes to "
-                        "Cleartype enabled/disabled. r=jfkthame",
-                    },
-                    {
-                        "author": "Jonathan Kew",
-                        "revlink": "https://hg.mozilla.org/integration/mozilla-inbound/"
-                        "rev/1ccc676a3a2c",
-                        "desc": "Bug 661471. Part 6.3: Ensure that force_gdi_classic "
-                        "doesn't make us use ClearType when ClearType is "
-                        "disabled. r=roc",
-                    },
-                    {
-                        "author": "Jonathan Kew",
-                        "revlink": "https://hg.mozilla.org/integration/mozilla-inbound/"
-                        "rev/5607cca3f7bf",
-                        "desc": "Bug 661471. Part 7: Let gfxDWriteFonts know whether "
-                        "we are honouring 'GDI classic' overrides. r=roc",
-                    },
+                        "author": "Olivier Mehani",
+                        "desc": "Bug 1967654 - Change line ending to Unix in _CardsSections.scss "
+                        "r=reemhamz,home-newtab-reviewers",
+                        "revlinks": [
+                            "https://github.com/mozilla-firefox/firefox/commit/731168ede47e",
+                            "https://hg.mozilla.org/integration/autoland/rev/bc4f7219b7a5",
+                        ],
+                    }
                 ],
+                "pushlog": "https://hg.mozilla.org/integration/autoland/pushloghtml?startID=232564&endID=232565",
+                "user": "rhamoui@mozilla.com",
             },
         ]
 
-        message = {
-            "payload": {
-                "repo_url": "https://hg.mozilla.org/integration/mozilla-inbound",
-                "pushlog_pushes": [
-                    {
-                        "push_full_json_url": "https://hg.mozilla.org/integration/mozilla-inbound/"
-                        "json-pushes?version=2&full=1&startID=6&endID=7"
-                    },
-                ],
-            }
-        }
+        github_repos = config.github_repos("mozilla-firefox/firefox:integration/autoland")
 
-        pushes = list(PulseHgPushes.get_pushes_info(message))
-
-        self.maxDiff = None
-        self.assertEqual(pushes, [results[1]])
-
-        message = {
-            "payload": {
-                "repo_url": "https://hg.mozilla.org/integration/mozilla-inbound",
-                "pushlog_pushes": [
-                    {
-                        "push_full_json_url": "https://hg.mozilla.org/integration/mozilla-inbound/"
-                        "json-pushes?version=2&full=1&startID=5&endID=6"
-                    },
-                    {
-                        "push_full_json_url": "https://hg.mozilla.org/integration/mozilla-inbound/"
-                        "json-pushes?version=2&full=1&startID=6&endID=7"
-                    },
-                ],
-            }
-        }
-
-        pushes = list(PulseHgPushes.get_pushes_info(message))
-
-        self.assertEqual(pushes, results)
-
-        message = {
-            "payload": {
-                "repo_url": "https://hg.mozilla.org/integration/mozilla-inbound",
-                "pushlog_pushes": [
-                    {
-                        "push_full_json_url": "https://hg.mozilla.org/integration/mozilla-inbound/"
-                        "json-pushes?version=2&full=1&startID=5&endID=7"
-                    },
-                ],
-            }
-        }
-
-        pushes = list(PulseHgPushes.get_pushes_info(message))
-
-        self.maxDiff = None
-        self.assertEqual(pushes, results)
+        # single push
 
         message = {
             "payload": {
@@ -219,39 +179,54 @@ class TestPushesInfo(unittest.TestCase):
                 "pushlog_pushes": [
                     {
                         "push_full_json_url": "https://hg.mozilla.org/integration/autoland/"
-                        "json-pushes?version=2&full=1&startID=36889&endID=36890"
+                        "json-pushes?version=2&full=1&startID=232564&endID=232565"
                     },
                 ],
             }
         }
 
-        pushes = list(PulseHgPushes.get_pushes_info(message))
-
-        self.assertEqual(
-            [p["source-repo"] for p in pushes[0]["changesets"] if "source-repo" in p],
-            ["https://github.com/servo/servo"] * 8274,
-        )
-
-        pushes[0]["changesets"] = [
-            p for p in pushes[0]["changesets"] if "source-repo" not in p
-        ]
+        pushes = list(PulseHgPushes.get_pushes_info(message, github_repos))
 
         self.maxDiff = None
-        servo_results = [
-            {
-                "changesets": [
+        self.assertEqual(pushes, [results[1]])
+
+        # multiple pushes
+
+        message = {
+            "payload": {
+                "repo_url": "https://hg.mozilla.org/integration/autoland",
+                "pushlog_pushes": [
                     {
-                        "author": "Gregory Szorc",
-                        "revlink": "https://hg.mozilla.org/integration/autoland/"
-                        "rev/be030db91f00",
-                        "desc": "Bug 1322769 - Free the oxidized lizzard, vendor "
-                        "Servo",
-                        "is_merge": True,
-                    }
+                        "push_full_json_url": "https://hg.mozilla.org/integration/autoland/"
+                        "json-pushes?version=2&full=1&startID=232563&endID=232564"
+                    },
+                    {
+                        "push_full_json_url": "https://hg.mozilla.org/integration/autoland/"
+                        "json-pushes?version=2&full=1&startID=232564&endID=232565"
+                    },
                 ],
-                "pushlog": "https://hg.mozilla.org/integration/autoland/"
-                "pushloghtml?startID=36889&endID=36890",
-                "user": "gszorc@mozilla.com",
             }
-        ]
-        self.assertEqual(pushes, servo_results)
+        }
+
+        pushes = list(PulseHgPushes.get_pushes_info(message, github_repos))
+
+        self.assertEqual(pushes, results)
+
+        # push range spans multiple pushes
+
+        message = {
+            "payload": {
+                "repo_url": "https://hg.mozilla.org/integration/autoland",
+                "pushlog_pushes": [
+                    {
+                        "push_full_json_url": "https://hg.mozilla.org/integration/autoland/"
+                        "json-pushes?version=2&full=1&startID=232563&endID=232565"
+                    },
+                ],
+            }
+        }
+
+        pushes = list(PulseHgPushes.get_pushes_info(message, github_repos))
+
+        self.maxDiff = None
+        self.assertEqual(pushes, results)
